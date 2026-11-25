@@ -409,7 +409,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.2";
+const VERSION = "v4.3";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -425,6 +425,10 @@ const LANG_RULE = "SPRACHE – oberste Regel: Dieses Gespräch ist Deutsch (de-D
   + "Antworte ausschließlich auf Deutsch. Kein Englisch, auch nicht in einzelnen Sätzen, Floskeln oder Fachbegriffen – nimm die deutsche Bezeichnung. "
   + "Auch wenn der Nutzer englisch redet oder ein englisches Wort benutzt: du antwortest deutsch. "
   + "Du übersetzt nie. Keine englische Begrüßung, kein spanischer Satz.\n\n";
+/* Sprache für die Mitschrift – erst beim Sitzungsaufbau bestimmt, nicht beim Laden
+   (sonst greift sie auf Einstellungen zu, die noch gar nicht gelesen sind). */
+function transLang(){ return /^[a-z]{2}-[A-Z]{2}$/.test((S && S.lang) || "") ? S.lang : "de-DE"; }
+
 const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nicht schnell herunterrasseln. "
   + "Warte, bis ich meinen Satz zu Ende gesprochen habe; falle mir nicht ins Wort und fang nicht an, während ich noch rede. "
   + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten.";
@@ -726,9 +730,12 @@ async function wsText(data){
 
 /* Merker: hat Google deine Worte schon wieder in einer Fremdsprache mitgeschrieben? */
 function transcriptUnklar(t){
-  const x = String(t || "");
-  if(/[¿¡ñçêơưđ]/i.test(x)) return true;
-  if(/\b(el|la|los|las|que|como|estás|estas|entonces|vida|qué|dice|hablar|gracias|hola|bueno|pero)\b/i.test(x)) return true;
+  const x = String(t || "").trim();
+  if(!x) return false;
+  if(/[\u0400-\u04FF\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F]/.test(x)) return true; // kyrillisch, japanisch, chinesisch, koreanisch, thai
+  if(/[¿¡ñç]/i.test(x)) return true;                       // spanisch/portugiesisch
+  if(/[ăâđêôơư]/i.test(x)) return true;                    // vietnamesisch
+  if(/\b(entonces|vida|qué|como estás|gracias|hola|bueno|pero|dice)\b/i.test(x)) return true;
   return false;
 }
 
@@ -772,8 +779,11 @@ function connect(){
         }
       },
       systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + LANG_TAIL }] },
-      inputAudioTranscription: {},
-      outputAudioTranscription: {},
+      /* v4.3: Google riet die Sprache (leeres {} = automatisch erkennen) und schrieb
+         dein Deutsch als Spanisch, Vietnamesisch oder Koreanisch mit. Mit einem
+         BCP-47-Hinweis wird fest auf Deutsch erkannt – Eingang (Mitschrift) wie Ausgang. */
+      inputAudioTranscription:  { languageCodes: [transLang()] },
+      outputAudioTranscription: { languageCodes: [transLang()] },
       /* Ohne das reisst die Sitzung nach wenigen Minuten ab – genau der Punkt,
          an dem ein "Gespräch" bisher kein Gespräch war. */
       contextWindowCompression: { slidingWindow: {} },
