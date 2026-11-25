@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mila · Realtime</title>
 <style>
+.mtabs{display:flex;gap:6px;margin:4px 0 14px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:8px}
+.mtab{flex:1;background:transparent;border:1px solid rgba(255,255,255,.16);color:#cfd0e6;border-radius:10px;padding:9px 8px;font-size:13px;font-weight:600}
+.mtab.on{background:linear-gradient(135deg,#7b5cff,#b44cff);border-color:transparent;color:#fff}
   :root{
     --bg:#0c0a12; --panel:#181524; --panel2:#221d31; --line:#332c47;
     --txt:#ece9f7; --muted:#9a93b8; --acc:#8b6cf6; --acc2:#b3a1ff; --pink:#e879c9;
@@ -244,6 +247,70 @@ window.addEventListener("unhandledrejection", function(e){
     </div>
     <div class="d">Der Key bleibt lokal im Browser. Er geht nur an Google, während das Gespräch läuft.</div>
 
+    <div class="mtabs" id="setTabs">
+      <button class="mtab on" data-tab="allg">Einstellungen</button>
+      <button class="mtab" data-tab="mic">Mikrofon-Equalizer</button>
+    </div>
+
+    <div id="micTab" style="display:none">
+      <div class="foot" style="margin:0 0 10px">
+        <b>Was das hier tut:</b> Der Klang deines Mikrofons wird angepasst, <b>bevor</b> er zu Google geht – genau wie bei
+        einem Mischpult. Ziel ist nicht „schön klingen“, sondern <b>Sprache deutlicher</b>: Rumpeln und Raumhall raus,
+        Konsonanten rein. Wenn sie Wörter verwechselt, bringt dieser Regler oft mehr als alles andere.
+      </div>
+
+      <label class="lb">Klangbild auf einen Griff</label>
+      <div class="row" style="flex-wrap:wrap;gap:6px">
+        <button class="ghost eqp" data-eq="neutral" style="flex:1 1 30%">Neutral</button>
+        <button class="ghost eqp" data-eq="sprache" style="flex:1 1 30%">Sprache klar</button>
+        <button class="ghost eqp" data-eq="still" style="flex:1 1 30%">Ruhiges Zimmer</button>
+        <button class="ghost eqp" data-eq="laut" style="flex:1 1 30%">Laute Umgebung</button>
+        <button class="ghost eqp" data-eq="nah" style="flex:1 1 30%">Ganz nah am Mikro</button>
+      </div>
+      <div class="foot" id="eqpresetinfo">Gewählt: <b>Neutral</b></div>
+
+      <div class="hr"></div>
+
+      <label class="lb">Rumpeln weg (Tiefe Töne unter …): <span id="eqhpv">100</span> Hz</label>
+      <input type="range" id="eqhp" min="40" max="300" step="10" value="100">
+      <div class="foot">Hebt Brummen, Lüfter, Tischklopfen und Bauchreden raus. Bei tiefem Brummen höher stellen.</div>
+
+      <label class="lb">Tiefen (250 Hz): <span id="eqb1v">0</span> dB</label>
+      <input type="range" id="eqb1" min="-12" max="12" step="1" value="0">
+      <div class="foot">Zu viel = dumpf und dröhnend. Für Sprache meist leicht absenken.</div>
+
+      <label class="lb">Mitten (1 kHz): <span id="eqb2v">0</span> dB</label>
+      <input type="range" id="eqb2" min="-12" max="12" step="1" value="0">
+      <div class="foot">Hier sitzt die Verständlichkeit der Vokale.</div>
+
+      <label class="lb">Deutlichkeit (3 kHz): <span id="eqb3v">0</span> dB</label>
+      <input type="range" id="eqb3" min="-12" max="12" step="1" value="0">
+      <div class="foot"><b>Der wichtigste Regler für die Erkennung.</b> Konsonanten (s, t, k, f) sitzen hier – zu wenig davon,
+        und „super“ wird zu „Zucker“. Vorsichtig hochdrehen; zu viel zischt.</div>
+
+      <label class="lb">Höhen (6 kHz): <span id="eqb4v">0</span> dB</label>
+      <input type="range" id="eqb4" min="-12" max="12" step="1" value="0">
+      <div class="foot">Frische und Zischlaute. Zu viel = scharfes S.</div>
+
+      <label class="lb">Verstärkung: <span id="gainv2">1,8</span>×</label>
+      <input type="range" id="micgain2" min="100" max="400" step="10" value="180">
+
+      <div class="row" style="margin-top:10px">
+        <button id="eqtest">Pegel testen</button>
+        <button id="eqreset" class="ghost">Alles zurücksetzen</button>
+      </div>
+      <div class="foot" id="eqpegel">Pegel: –</div>
+
+      <div class="hr"></div>
+      <div class="foot" style="color:#ffd9a0">
+        <b>Ehrlich:</b> Zu viel Verstärkung macht es <b>schlechter</b> – dann übersteuert der Ton, und Übersteuerung ist für
+        die Erkennung schlimmer als Leise. Dreh lieber am „Deutlichkeit“-Regler als am Pegel.
+        Der Equalizer läuft live: du kannst ihn mitten im Gespräch verstellen und sofort hören, ob sie dich besser versteht.
+      </div>
+    </div>
+
+    <div id="allgTab">
+
     <details class="grp" open><summary>Gemini · Key, Modell, Charakter</summary>
     <label class="lb">Gemini-API-Key</label>
     <input type="password" id="key" placeholder="AQ… oder AIza…" autocomplete="off">
@@ -392,6 +459,8 @@ window.addEventListener("unhandledrejection", function(e){
         Der Zugriff ist <b>nur lesend</b> (drive.readonly). Der Schlüssel bleibt im Browser und wird nicht auf dem Server abgelegt.</div>
     </details>
 
+    </div><!-- /allgTab -->
+
     <div class="row">
       <button id="save">Speichern</button>
       <button id="exportBtn">Verlauf als .md</button>
@@ -423,7 +492,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.6";
+const VERSION = "v4.8";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -464,6 +533,7 @@ let S = {
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
   sil:2200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
+  eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 },
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -579,6 +649,7 @@ function onMicChunk(f32){
   // Pegeleiste
   let peak = 0;
   for(let i=0;i<f32.length;i+=16){ const a = Math.abs(f32[i]); if(a>peak) peak = a; }
+  lastPeak = peak;
   const h = Math.max(4, Math.min(26, Math.round(peak*46)));
   micBars.forEach((b,i)=>{ b.style.height = Math.max(4, h - Math.abs(4-i)*3) + "px"; });
 
@@ -604,7 +675,72 @@ function onMicChunk(f32){
     sentChunks++; sentBytes += pcm.length;
   }catch(e){ /* Socket im Umbau – Chunk verwerfen, nicht die App */ }
 }
-let micBars = [];
+let micBars = [], eqNodes = null, lastPeak = 0;
+
+/* ---------- Mikrofon-Equalizer ---------- */
+const EQ_PRESETS = {
+  neutral: { hp:100, b1:0,  b2:0,  b3:0, b4:0,  gain:1.8, text:"Neutral" },
+  sprache: { hp:120, b1:-3, b2:2,  b3:5, b4:1,  gain:2.0, text:"Sprache klar" },
+  still:   { hp:130, b1:-2, b2:1,  b3:3, b4:0,  gain:2.0, text:"Ruhiges Zimmer" },
+  laut:    { hp:180, b1:-6, b2:2,  b3:6, b4:2,  gain:2.3, text:"Laute Umgebung" },
+  nah:     { hp:80,  b1:-6, b2:1,  b3:3, b4:-2, gain:1.3, text:"Ganz nah am Mikro" }
+};
+function eqState(){
+  if(!S.eq || typeof S.eq !== "object") S.eq = { preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 };
+  return S.eq;
+}
+function buildEQ(src){
+  eqNodes = null;
+  if(!capCtx) return src;
+  const e = eqState();
+  try{
+    const hp = capCtx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = e.hp; hp.Q.value = 0.7;
+    const p1 = capCtx.createBiquadFilter(); p1.type = "peaking";  p1.frequency.value = 250;  p1.Q.value = 0.9; p1.gain.value = e.b1;
+    const p2 = capCtx.createBiquadFilter(); p2.type = "peaking";  p2.frequency.value = 1000; p2.Q.value = 0.9; p2.gain.value = e.b2;
+    const p3 = capCtx.createBiquadFilter(); p3.type = "peaking";  p3.frequency.value = 3000; p3.Q.value = 0.9; p3.gain.value = e.b3;
+    const p4 = capCtx.createBiquadFilter(); p4.type = "highshelf"; p4.frequency.value = 6000; p4.gain.value = e.b4;
+    src.connect(hp); hp.connect(p1); p1.connect(p2); p2.connect(p3); p3.connect(p4);
+    eqNodes = { hp, p1, p2, p3, p4 };
+    return p4;
+  }catch(err){ eqNodes = null; return src; }
+}
+function applyEQ(){
+  const e = eqState();
+  if(!eqNodes) return;
+  try{
+    eqNodes.hp.frequency.value = e.hp;
+    eqNodes.p1.gain.value = e.b1;
+    eqNodes.p2.gain.value = e.b2;
+    eqNodes.p3.gain.value = e.b3;
+    eqNodes.p4.gain.value = e.b4;
+  }catch(err){}
+}
+function eqToUI(){
+  const e = eqState();
+  const set = (id, v, fx) => { const el = $(id); if(!el) return; el.value = v;
+    const lab = $(id + "v"); if(lab) lab.textContent = fx ? fx(v) : v; };
+  set("eqhp", e.hp);
+  set("eqb1", e.b1, v => (v > 0 ? "+" : "") + v);
+  set("eqb2", e.b2, v => (v > 0 ? "+" : "") + v);
+  set("eqb3", e.b3, v => (v > 0 ? "+" : "") + v);
+  set("eqb4", e.b4, v => (v > 0 ? "+" : "") + v);
+  const g = Number(S.micGain) || 1.8;
+  if($("micgain")) $("micgain").value = Math.round(g * 100);
+  if($("micgain2")) $("micgain2").value = Math.round(g * 100);
+  if($("gainv")) $("gainv").textContent = g.toFixed(1).replace(".", ",");
+  if($("gainv2")) $("gainv2").textContent = g.toFixed(1).replace(".", ",");
+  const info = $("eqpresetinfo");
+  if(info) info.innerHTML = "Gewählt: <b>" + ((EQ_PRESETS[e.preset] || {}).text || "eigenes") + "</b>";
+}
+function setMicGain(g){
+  S.micGain = Math.max(1, Math.min(4, g));
+  if($("micgain")) $("micgain").value = Math.round(S.micGain * 100);
+  if($("micgain2")) $("micgain2").value = Math.round(S.micGain * 100);
+  const t = S.micGain.toFixed(1).replace(".", ",");
+  if($("gainv")) $("gainv").textContent = t;
+  if($("gainv2")) $("gainv2").textContent = t;
+  save();
+}
 
 /* =====================================================================
    Zweiter Durchgang für die Mitschrift.
@@ -707,6 +843,9 @@ async function startAudio(){
   silentGain = capCtx.createGain(); silentGain.gain.value = 0;
   src.connect(silentGain); silentGain.connect(capCtx.destination);
 
+  /* Equalizer: läuft VOR dem Senden, also hört Google den gefilterten Ton. */
+  const srcOut = buildEQ(src);
+
   sentChunks = 0; sentBytes = 0; recvChunks = 0; recvBytes = 0; tStart = Date.now();
 
   micBars = [];
@@ -719,13 +858,13 @@ async function startAudio(){
     await capCtx.audioWorklet.addModule(url);
     aWorklet = new AudioWorkletNode(capCtx, "mic-tap");
     aWorklet.port.onmessage = ev => onMicChunk(ev.data);
-    src.connect(aWorklet);
+    srcOut.connect(aWorklet);
     aWorklet.connect(silentGain);
     URL.revokeObjectURL(url);
   }catch(e){
     aWorklet = null;
     capNode = capCtx.createScriptProcessor(2048, 1, 1);
-    src.connect(capNode); capNode.connect(silentGain);
+    srcOut.connect(capNode); capNode.connect(silentGain);
     capNode.onaudioprocess = e => onMicChunk(e.inputBuffer.getChannelData(0));
   }
 
@@ -1035,6 +1174,25 @@ function connect(){
     const code = e.code || 0, reason = e.reason ? (" · " + e.reason) : "";
     const had = live;
     live = false;
+    /* Google hält die alte Sitzung nach einem Abbruch noch ein paar Sekunden.
+       Kommt 1008 „already connected“, ist das KEIN Key-Fehler, sondern nur zu
+       früh. Also warten und selbst neu aufbauen, statt auf Push-to-Talk
+       zurückzufallen (das hat dich mitten im Gespräch rausgeworfen). */
+    if(/already connected/i.test(e.reason || "")){
+      if(!had){
+        /* Wir waren noch beim Aufbau: den Versuch sauber beenden – der Aufrufer
+           versucht es nach einer Wartezeit erneut (siehe Aufbau-Schleife). */
+        feed("w", "Google hält die alte Sitzung noch – neuer Versuch gleich");
+        reject(new Error("already connected – alte Sitzung noch offen"));
+        return;
+      }
+      feed("w", "Google hält die alte Sitzung noch – ich warte 4 s und baue neu auf");
+      toast("Kurz warten – die alte Sitzung wird erst freigegeben.", 6000);
+      try{ if(ws && ws.readyState === 1) ws.close(1000, "doppelt"); }catch(err){}
+      ws = null;
+      setTimeout(() => { if(activeMode === "live" && !stopping) reconnect("alte Sitzung freigegeben"); }, 4000);
+      return;
+    }
     if(!had){
       feed("e", "Verbindung zu (" + code + reason + ") – " + closeHint(code, reason));
       reject(new Error(closeHint(code, reason)));
@@ -1134,8 +1292,18 @@ function updateInfo(){
 }
 
 /* ---------- Neu aufbauen statt sterben ---------- */
+let letzterAufbau = 0;
 async function reconnect(why){
   if(reconnecting || activeMode !== "live") return;
+  /* Nie schneller als 4 s nach dem letzten Aufbau verbinden – sonst kollidieren
+     zwei Sitzungen und Google antwortet „already connected“. */
+  const warte = Math.max(0, 4000 - (Date.now() - letzterAufbau));
+  if(warte > 0){
+    feed("w", "Neuer Aufbau in " + Math.round(warte/1000) + " s (alte Sitzung wird freigegeben)");
+    setTimeout(() => reconnect(why), warte);
+    return;
+  }
+  letzterAufbau = Date.now();
   reconnecting = true;
   try{
     toast("Verbindung wird neu aufgebaut" + (why ? " (" + why + ")" : "") + " …", 6000);
@@ -1504,11 +1672,68 @@ $("sil").addEventListener("input", e => {
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
 if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
-if($("micgain")) $("micgain").addEventListener("input", e => {
-  S.micGain = Number(e.target.value) / 100;
-  if($("gainv")) $("gainv").textContent = S.micGain.toFixed(1).replace(".", ",");
-  save();
+if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
+if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
+
+/* ---------- Registerkarten in den Einstellungen ---------- */
+function showSetTab(name){
+  const allg = $("allgTab"), mic = $("micTab");
+  if(!allg || !mic) return;
+  allg.style.display = name === "mic" ? "none" : "";
+  mic.style.display = name === "mic" ? "" : "none";
+  document.querySelectorAll("#setTabs .mtab").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  try{ localStorage.setItem(LS + "tab", name); }catch(e){}
+}
+document.querySelectorAll("#setTabs .mtab").forEach(b => {
+  b.addEventListener("click", () => showSetTab(b.dataset.tab));
 });
+try{ if(localStorage.getItem(LS + "tab") === "mic") showSetTab("mic"); }catch(e){}
+
+/* ---------- Equalizer-Regler ---------- */
+const eqBind = (id, key) => {
+  const el = $(id); if(!el) return;
+  el.addEventListener("input", e => {
+    const v = Number(e.target.value);
+    eqState()[key] = v;
+    eqState().preset = "eigenes";
+    const lab = $(id + "v");
+    if(lab) lab.textContent = (key === "hp") ? v : ((v > 0 ? "+" : "") + v);
+    const info = $("eqpresetinfo"); if(info) info.innerHTML = "Gewählt: <b>eigenes</b>";
+    applyEQ(); save();
+  });
+};
+eqBind("eqhp", "hp"); eqBind("eqb1", "b1"); eqBind("eqb2", "b2"); eqBind("eqb3", "b3"); eqBind("eqb4", "b4");
+
+document.querySelectorAll(".eqp").forEach(b => {
+  b.addEventListener("click", () => {
+    const p = EQ_PRESETS[b.dataset.eq];
+    if(!p) return;
+    const e = eqState();
+    e.preset = b.dataset.eq; e.hp = p.hp; e.b1 = p.b1; e.b2 = p.b2; e.b3 = p.b3; e.b4 = p.b4;
+    setMicGain(p.gain);
+    eqToUI(); applyEQ();
+    toast("Klangbild: " + p.text, 4000);
+  });
+});
+if($("eqreset")) $("eqreset").addEventListener("click", () => {
+  S.eq = { preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 };
+  setMicGain(1.8); eqToUI(); applyEQ(); toast("Mikrofon auf Neutral zurückgesetzt", 4000);
+});
+if($("eqtest")) $("eqtest").addEventListener("click", () => {
+  const box = $("eqpegel"); if(!box) return;
+  if(!live){ box.textContent = "Pegel: erst Gespräch starten – ohne Mikrofon gibt es keinen Pegel."; return; }
+  box.textContent = "Pegel: bitte 5 Sekunden normal sprechen …";
+  let n = 0, max = 0;
+  const t = setInterval(() => {
+    n++; max = Math.max(max, lastPeak);
+    const db = max > 0 ? Math.round(20 * Math.log10(max)) : -99;
+    box.textContent = "Pegel: " + (db >= 0 ? "0" : db) + " dB · Balken " + (max > 0.95 ? "kleben (zu laut!)" : max < 0.2 ? "zu leise" : "gut");
+    if(n >= 10){ clearInterval(t);
+      box.textContent += max > 0.95 ? " → Verstärkung runter." : max < 0.2 ? " → Verstärkung hoch oder näher ans Mikro." : " → so lassen.";
+    }
+  }, 500);
+});
+eqToUI();
 
 /* Kreis antippen = sie hoert sofort auf zu reden */
 $("halo").addEventListener("click", interruptHer);
@@ -2295,11 +2520,26 @@ async function startConversation(){
   }
 
   let err = null;
-  try{
-    await connect();
-    setModePill("live");
-    return;
-  }catch(e){ err = e; }
+  for(let versuch = 1; versuch <= 3; versuch++){
+    try{
+      await connect();
+      setModePill("live");
+      return;
+    }catch(e){
+      err = e;
+      const m = String((e && e.message) || "");
+      const weich = /kein Handshake|already connected|WebSocket|Netz|1006|1008/i.test(m);
+      const hart  = /Kontingent|quota|abgelehnt|nicht freigeschaltet|API key|permission/i.test(m);
+      if(versuch < 3 && weich && !hart){
+        feed("w", "Aufbau " + versuch + " ging nicht (" + m.slice(0, 60) + ") – neuer Versuch in " + (versuch * 3) + " s");
+        try{ if(ws) ws.close(1000, "retry"); }catch(_){}
+        ws = null; live = false;
+        await new Promise(r => setTimeout(r, versuch * 3000));
+        continue;
+      }
+      break;
+    }
+  }
 
   /* Kontingent aufgebraucht: keine Rueckfall-Kette, sondern Klartext. */
   if(isQuota(err && err.message || "")){
