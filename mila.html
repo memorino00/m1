@@ -448,6 +448,13 @@ window.addEventListener("unhandledrejection", function(e){
     </div>
     <pre id="modelinfo"></pre>
 
+    <label class="lb" style="margin-top:10px">Gesprächsmodell ausprobieren</label>
+    <div class="foot" style="margin:0 0 6px">Wie gut du verstanden wirst, hängt auch am Modell – die Erkennung steckt im Gesprächsmodell selbst.
+      Hier kannst du durchschalten: antippen, Mila baut neu auf, einen Satz sprechen, vergleichen.</div>
+    <div class="row" style="flex-wrap:wrap;gap:6px" id="livePickRow">
+      <button id="loadLiveModels" class="ghost" style="flex:1 1 100%">Modelle laden &amp; durchschalten</button>
+    </div>
+
 
 
     </details>
@@ -513,7 +520,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.1";
+const VERSION = "v5.2";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -1339,7 +1346,8 @@ function updateInfo(){
 /* ---------- Neu aufbauen statt sterben ---------- */
 let letzterAufbau = 0;
 async function reconnect(why){
-  if(reconnecting || activeMode !== "live") return;
+  if(activeMode !== "live") return;
+  if(reconnecting) return;
   reconnecting = true;
   toast("Verbindung wird neu aufgebaut" + (why ? " (" + why + ")" : "") + " …", 5000);
   let letzterFehler = null;
@@ -1944,6 +1952,56 @@ document.addEventListener("click", ev => {
   const id = ev.target && ev.target.id;
   if(id === "eqmA") eqMessen("A");
   if(id === "eqmB") eqMessen("B");
+});
+
+/* =====================================================================
+   Gesprächsmodell umschalten.
+   Die Spracherkennung sitzt im Live-Modell selbst – ein anderes Modell kann
+   dich deutlich besser oder schlechter verstehen. Deshalb: auswählen, neu
+   aufbauen, einen Satz sprechen, vergleichen.
+   ===================================================================== */
+let liveModelle = [];
+async function loadLiveModels(){
+  const row = $("livePickRow");
+  if(row) row.innerHTML = "<span class='foot' style='margin:0'>Frage Google nach deinen Live-Modellen …</span>";
+  try{
+    const d = await discover();
+    liveModelle = (d && d.live) || [];
+    if(!liveModelle.length){
+      if(row) row.innerHTML = "<span class='foot' style='margin:0'>Google hat keine Live-Modelle für diesen Key gemeldet.</span>";
+      return;
+    }
+  }catch(e){
+    if(row) row.innerHTML = "<span class='foot' style='margin:0'>Modellliste nicht abrufbar: " + (e.message || e) + "</span>";
+    return;
+  }
+  if(!row) return;
+  row.innerHTML = "";
+  liveModelle.forEach(m => {
+    const b = document.createElement("button");
+    b.className = (m === S.model ? "" : "ghost");
+    b.style.flex = "1 1 47%";
+    b.textContent = m.replace(/^models\//, "") + (m === S.model ? " ✓" : "");
+    b.onclick = async () => {
+      if(m === S.model){ toast("Das Modell läuft schon.", 4000); return; }
+      S.model = m; save(); fillCfg();
+      loadLiveModels();
+      feed("", "Gesprächsmodell gewechselt: " + m);
+      toast("Modell: " + m + " – ich baue neu auf", 6000);
+      if(activeMode === "live"){
+        try{ await reconnect("Modellwechsel"); }catch(e){ toast("Neuaufbau: " + (e.message || e), 8000); }
+      }
+    };
+    row.appendChild(b);
+  });
+  const hin = document.createElement("div");
+  hin.className = "foot";
+  hin.style.cssText = "flex:1 1 100%;margin:6px 0 0";
+  hin.innerHTML = "Antippen = sofort umschalten. Danach <b>einen ganzen deutschen Satz</b> sprechen und vergleichen.";
+  row.appendChild(hin);
+}
+document.addEventListener("click", ev => {
+  if(ev.target && ev.target.id === "loadLiveModels") loadLiveModels();
 });
 
 /* ---------- Registerkarten in den Einstellungen ---------- */
