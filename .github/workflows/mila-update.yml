@@ -9,9 +9,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          curl -sSL -o neu.html "https://drive.usercontent.google.com/download?id=1sOmzjRXoovX13bHaH09lnU0imEVHt057&export=download"
+          URL=$(curl -sSL "https://drive.usercontent.google.com/download?id=1sOmzjRXoovX13bHaH09lnU0imEVHt057&export=download" | tr -d '\r\n ')
+          echo "Quelle: $URL"
+          case "$URL" in https://*) ;; *) echo "keine gültige Adresse"; exit 1;; esac
+          curl -sSL -o neu.html "$URL"
+          echo "Größe: $(wc -c < neu.html) Bytes"
           grep -q "</html>" neu.html && grep -q 'const VERSION' neu.html && [ $(wc -c < neu.html) -gt 50000 ]
           mv neu.html mila.html
           git config user.name Mila-Update
           git config user.email actions@users.noreply.github.com
-          git diff --quiet -- mila.html || (git add mila.html && git commit -m "Neue Fassung aus Drive" && git push)
+          git diff --quiet -- mila.html || (git add mila.html && git commit -m "Neue Fassung" && git push)
