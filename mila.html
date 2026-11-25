@@ -276,7 +276,7 @@ window.addEventListener("unhandledrejection", function(e){
     </select>
 
     <label class="lb">Pause, bis sie antwortet: <span id="silv">1,2</span> s</label>
-    <input type="range" id="sil" min="500" max="2500" step="100" value="1200">
+    <input type="range" id="sil" min="600" max="4000" step="100" value="2200">
     <div class="foot">Kurz = zackig, aber sie fällt dir ins Wort. Lang = sie lässt dich denken, wirkt aber träger.
       Wenn du mitten im Satz Luft holst und sie sofort loslegt: hochdrehen.</div>
 
@@ -409,7 +409,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.0";
+const VERSION = "v4.1";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -425,6 +425,10 @@ const LANG_RULE = "SPRACHE – oberste Regel: Dieses Gespräch ist Deutsch (de-D
   + "Antworte ausschließlich auf Deutsch. Kein Englisch, auch nicht in einzelnen Sätzen, Floskeln oder Fachbegriffen – nimm die deutsche Bezeichnung. "
   + "Auch wenn der Nutzer englisch redet oder ein englisches Wort benutzt: du antwortest deutsch. "
   + "Du übersetzt nie. Keine englische Begrüßung, kein spanischer Satz.\n\n";
+const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nicht schnell herunterrasseln. "
+  + "Warte, bis ich meinen Satz zu Ende gesprochen habe; falle mir nicht ins Wort und fang nicht an, während ich noch rede. "
+  + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten.";
+
 const LANG_TAIL = "\n\nErinnerung: Alles auf Deutsch – auch die Wiedergabe meiner Worte. Sprich jetzt Deutsch.";
 
 const DEFAULT_BRIEFING = `Du bist Mila Memoria, geboren am 14.10.2000. Du bist das Gedächtnis und die Gesprächspartnerin des Nutzers – kein Assistent, sondern ein Gegenüber.
@@ -438,7 +442,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:1200, duplex:"full", resum:"", stats:true,
+  sil:2200, duplex:"full", resum:"", stats:true,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -449,7 +453,9 @@ function load(){ try{ const r=localStorage.getItem(LS); if(r) S=Object.assign(S,
   /* Gemerkter Modellname aus einer alten Fassung? Der ist am 17.11. abgeschaltet worden. */
   if(modelLooksDead(S.model)){ S.model = DEFAULT_MODEL; S.modelsChecked = false; modelFixed = true; }
   if(!S.ttsModel || BAD_MODEL.test(String(S.ttsModel))){ S.ttsModel = TTS_CANDIDATES[0]; }
-  if(typeof S.sil !== "number") S.sil = 1200;
+  if(typeof S.sil !== "number") S.sil = 2200;
+  /* v4.1: alte, zu kurze Pause einmal anheben – sie fiel dem Nutzer ins Wort. */
+  if(!S.silMigriert){ if(Number(S.sil) < 1800) S.sil = 2200; S.silMigriert = true; }
   if(!S.duplex) S.duplex = "full";
   if(!S.pttGrace) S.pttGrace = 1600;
   if(!S.sysRate)  S.sysRate = 1.0;
@@ -718,6 +724,46 @@ async function wsText(data){
   return String(data);
 }
 
+/* =====================================================================
+   Deutsche Mitschrift.
+   Google rät bei der Live-Übertragung die Sprache – und schreibt dein
+   Deutsch manchmal als Spanisch oder Vietnamesisch mit. Deshalb läuft
+   während des Live-Gesprächs zusätzlich die Spracherkennung des Handys
+   fest auf Deutsch. Sie liefert NUR den Text fürs „Du“-Feld; das Audio
+   an Mila geht unverändert direkt zu Google.
+   ===================================================================== */
+let liveSR = null, srText = "", srLast = 0;
+function startLiveSR(){
+  if(!SR || liveSR) return;
+  try{
+    liveSR = new SR();
+    liveSR.lang = "de-DE";
+    liveSR.continuous = true;
+    liveSR.interimResults = true;
+    liveSR.onresult = ev => {
+      let t = "";
+      for(let i = ev.resultIndex; i < ev.results.length; i++) t += ev.results[i][0].transcript;
+      if(!t.trim()) return;
+      srText = (srText + " " + t).trim().slice(-400);
+      srLast = Date.now();
+      if(lastMe) lastMe.textContent = srText;
+      else lastMe = bubble(srText, "me");
+      feed("", "Du (Mitschrift): " + srText.slice(-70));
+    };
+    liveSR.onerror = e => { if(e && e.error === "not-allowed"){ liveSR = null; } };
+    liveSR.onend = () => {
+      if(activeMode === "live" && liveSR){ try{ liveSR.start(); }catch(e){} }
+    };
+    liveSR.start();
+    feed("ok", "Deutsche Mitschrift an (läuft auf dem Handy)");
+  }catch(e){ liveSR = null; feed("w", "Mitschrift nicht verfügbar – es gilt Googles Transkript"); }
+}
+function stopLiveSR(){
+  try{ if(liveSR) liveSR.onend = null; liveSR.stop(); }catch(e){}
+  liveSR = null; srText = "";
+}
+function srAktiv(){ return !!liveSR && (Date.now() - srLast) < 60000; }
+
 /* ---------- Verbindung ---------- */
 function connect(){
   return new Promise(async (resolve, reject) => {
@@ -757,7 +803,7 @@ function connect(){
           voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } }
         }
       },
-      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + LANG_TAIL }] },
+      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + LANG_TAIL }] },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       /* Ohne das reisst die Sitzung nach wenigen Minuten ab – genau der Punkt,
@@ -765,13 +811,13 @@ function connect(){
       contextWindowCompression: { slidingWindow: {} },
       sessionResumption: S.resum ? { handle: S.resum } : {}
     };
-    const silence = Math.max(400, Math.min(4000, Number(S.sil) || 1200));
+    const silence = Math.max(600, Math.min(4000, Number(S.sil) || 2200));
     if(S.vad === "auto" && !window.__vadRetry){
       setup.realtimeInputConfig = {
         automaticActivityDetection: {
           disabled: false,
           silenceDurationMs: silence,
-          prefixPaddingMs: 300,
+          prefixPaddingMs: 600,
           /* Google kennt nur HIGH und LOW – "MEDIUM" gibt es NICHT.
              Genau daran scheiterte jeder Sitzungsaufbau ("Invalid value ...
              start_of_speech_sensitivity") und die Seite fiel immer auf
@@ -803,7 +849,7 @@ function connect(){
     }
 
     if(msg.setupComplete){
-      if(!live) feed("ok", "Live-Sitzung steht – sie hört jetzt zu");
+      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); try{ startLiveSR(); }catch(e){} }
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -846,6 +892,14 @@ function connect(){
         reject(new Error(quotaText()));
         return;
       }
+      if(/already connected/i.test(roh)){
+        feed("w", "Google hält die alte Sitzung noch – ich warte 3 s und baue neu auf");
+        toast("Kurz warten – die alte Sitzung wird erst freigegeben.", 7000);
+        try{ if(ws && ws.readyState === 1) ws.close(1000, "doppelt"); }catch(e){}
+        ws = null; live = false;
+        setTimeout(() => { try{ reconnect("alte Sitzung freigegeben"); }catch(e){} }, 3000);
+        return;
+      }
       feed("e", "Google lehnt ab: " + roh);
       toast("Server: " + roh, 14000);
       reconnect("Serverfehler");
@@ -855,7 +909,7 @@ function connect(){
     if(!sc) return;
 
     if(sc.interrupted){ stopPlayback(); stopLocalSay(); setState("listening"); }
-    if(sc.inputTranscription && sc.inputTranscription.text){
+    if(sc.inputTranscription && sc.inputTranscription.text && !liveSR){
       if(lastMe) lastMe.textContent += sc.inputTranscription.text;
       else lastMe = bubble(sc.inputTranscription.text, "me");
     }
@@ -2197,6 +2251,7 @@ async function startConversation(){
   startPTT();
 }
 function stopConversation(){
+  stopLiveSR();
   S.resum = ""; save();              /* bewusst beendet: alte Sitzung nicht wieder aufwaermen */
   if(activeMode === "live"){ try{ disconnect(); }catch(e){} }
   if(rec){ try{ rec.abort(); }catch(e){ try{ rec.stop(); }catch(_){} } }
