@@ -288,12 +288,12 @@ window.addEventListener("unhandledrejection", function(e){
       <div class="foot">Hier sitzt die Verständlichkeit der Vokale.</div>
 
       <label class="lb">Deutlichkeit (3 kHz): <span id="eqb3v">0</span> dB</label>
-      <input type="range" id="eqb3" min="-12" max="12" step="1" value="0">
+      <input type="range" id="eqb3" min="-12" max="18" step="1" value="0">
       <div class="foot"><b>Der wichtigste Regler für die Erkennung.</b> Konsonanten (s, t, k, f) sitzen hier – zu wenig davon,
         und „super“ wird zu „Zucker“. Vorsichtig hochdrehen; zu viel zischt.</div>
 
       <label class="lb">Höhen (6 kHz): <span id="eqb4v">0</span> dB</label>
-      <input type="range" id="eqb4" min="-12" max="12" step="1" value="0">
+      <input type="range" id="eqb4" min="-12" max="18" step="1" value="0">
       <div class="foot">Frische und Zischlaute. Zu viel = scharfes S.</div>
 
       <label class="lb">Verstärkung: <span id="gainv2">1,8</span>×</label>
@@ -312,6 +312,15 @@ window.addEventListener("unhandledrejection", function(e){
         <button id="eqreset" class="ghost">Alles zurücksetzen</button>
       </div>
       <div class="foot" id="eqpegel">Pegel: –</div>
+
+      <div class="hr"></div>
+      <label class="lb">Vergleich messen – statt raten</label>
+      <div class="row" style="gap:6px">
+        <button id="eqmA" style="flex:1">Messung A</button>
+        <button id="eqmB" class="ghost" style="flex:1">Messung B</button>
+      </div>
+      <div class="foot" id="eqmout">Beide Knöpfe je 3 Sekunden sprechen lassen. A = wie es jetzt ist, B = nach dem Umschalten.
+        Danach steht hier, welche Einstellung <b>messbar</b> mehr Höhen und Pegel bringt – unabhängig vom Gefühl.</div>
 
       <div class="hr"></div>
       <div class="foot" style="color:#ffd9a0">
@@ -504,7 +513,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.0";
+const VERSION = "v5.1";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -1865,6 +1874,77 @@ function eqDraw(){
   eqDrawId = requestAnimationFrame(eqDraw);
 }
 function eqDrawStart(){ if(!eqDrawId) eqDrawId = requestAnimationFrame(eqDraw); }
+
+/* =====================================================================
+   A/B-Messung: 3 Sekunden zuhören und zwei Kennzahlen festhalten.
+   Kein Gefühl, sondern Zahlen: Pegel (dBFS) und Höhen-Anteil in Prozent.
+   Damit lässt sich „roher Ton an oder aus“ sachlich vergleichen.
+   ===================================================================== */
+let eqM = { A:null, B:null };
+
+function eqMessen(platz){
+  const an = eqAnalyser();
+  if(!an){ toast("Erst Mikrofon freigeben (Reiter ist offen, Vorschau startet gleich).", 6000); return; }
+  const out = $("eqmout");
+  if(out) out.textContent = "Messung " + platz + ": bitte 3 Sekunden normal sprechen …";
+  const bins = an.frequencyBinCount;
+  const k = new Uint8Array(bins);
+  const zeit = new Uint8Array(an.fftSize);
+  let n = 0, sumPegel = 0, sumHoch = 0, peak = 0, ticks = 0, leise = 0;
+  const t = setInterval(() => {
+    ticks++;
+    an.getByteFrequencyData(k);
+    an.getByteTimeDomainData(zeit);
+    let p = 0, rms = 0;
+    for(let i = 0; i < zeit.length; i++){ const v = (zeit[i] - 128) / 128; rms += v*v; if(Math.abs(v) > p) p = Math.abs(v); }
+    rms = Math.sqrt(rms / zeit.length);
+    if(p > peak) peak = p;
+    const proBin = (an.context.sampleRate / 2) / bins;
+    let unten = 0, oben = 0;
+    for(let i = 1; i < bins; i++){
+      const f = i * proBin;
+      if(f > 8000) break;
+      if(f >= 2000) oben += k[i]; else unten += k[i];
+    }
+    const ges = unten + oben;
+    if(rms > 0.002){                       /* nur Abschnitte mit Ton zählen */
+      n++;
+      sumPegel += 20 * Math.log10(Math.max(rms, 1e-6));
+      if(ges > 20) sumHoch += oben / ges * 100;
+    }else{ leise++; }
+    if(n >= 6 || ticks >= 16){
+      clearInterval(t);
+      const res = { pegel: Math.round(sumPegel / n), hoehen: Math.round(sumHoch / n), spitze: Math.round(peak * 100) };
+      eqM[platz] = res;
+      if(n === 0){
+        eqM[platz] = null;
+        if(out) out.innerHTML = "Messung " + platz + ": <b style='color:#ffd166'>kein Ton erkannt</b> – näher ans Mikrofon sprechen und nochmal drücken.";
+        feed("w", "Messung " + platz + ": kein Ton erkannt");
+        return;
+      }
+      if(out){
+        let text = "Messung " + platz + ": <b>" + res.pegel + " dB</b> · Höhen <b>" + res.hoehen + " %</b> · Spitze " + res.spitze + " %" + (n < 4 ? " <i>(kurz – nur " + n + " Messpunkte)</i>" : "");
+        if(eqM.A && eqM.B){
+          const dP = eqM.B.pegel - eqM.A.pegel, dH = eqM.B.hoehen - eqM.A.hoehen;
+          text += "<br><br><b>Vergleich A → B:</b> Pegel " + (dP >= 0 ? "+" : "") + dP + " dB · Höhen " + (dH >= 0 ? "+" : "") + dH + " Prozentpunkte.<br>";
+          if(dH >= 4) text += "<b style='color:#41d6a3'>B ist deutlich besser</b> – mehr Konsonanten, bessere Erkennung.";
+          else if(dH <= -4) text += "<b style='color:#ffd166'>A war besser</b> – zurück zur alten Einstellung.";
+          else text += "Praktisch gleich – dann entscheidet der Pegel: " + (Math.abs(dP) < 3 ? "auch der ist gleich." : (dP > 0 ? "B ist lauter." : "A ist lauter."));
+        }else{
+          text += "<br>Jetzt umschalten (z. B. Häkchen „roher Ton“) und <b>Messung B</b> drücken.";
+        }
+        out.innerHTML = text;
+      }
+      feed("", "Messung " + platz + ": " + res.pegel + " dB, Höhen " + res.hoehen + " %");
+    }
+  }, 500);
+}
+
+document.addEventListener("click", ev => {
+  const id = ev.target && ev.target.id;
+  if(id === "eqmA") eqMessen("A");
+  if(id === "eqmB") eqMessen("B");
+});
 
 /* ---------- Registerkarten in den Einstellungen ---------- */
 function showSetTab(name){
