@@ -409,7 +409,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.1";
+const VERSION = "v4.2";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -724,45 +724,13 @@ async function wsText(data){
   return String(data);
 }
 
-/* =====================================================================
-   Deutsche Mitschrift.
-   Google rät bei der Live-Übertragung die Sprache – und schreibt dein
-   Deutsch manchmal als Spanisch oder Vietnamesisch mit. Deshalb läuft
-   während des Live-Gesprächs zusätzlich die Spracherkennung des Handys
-   fest auf Deutsch. Sie liefert NUR den Text fürs „Du“-Feld; das Audio
-   an Mila geht unverändert direkt zu Google.
-   ===================================================================== */
-let liveSR = null, srText = "", srLast = 0;
-function startLiveSR(){
-  if(!SR || liveSR) return;
-  try{
-    liveSR = new SR();
-    liveSR.lang = "de-DE";
-    liveSR.continuous = true;
-    liveSR.interimResults = true;
-    liveSR.onresult = ev => {
-      let t = "";
-      for(let i = ev.resultIndex; i < ev.results.length; i++) t += ev.results[i][0].transcript;
-      if(!t.trim()) return;
-      srText = (srText + " " + t).trim().slice(-400);
-      srLast = Date.now();
-      if(lastMe) lastMe.textContent = srText;
-      else lastMe = bubble(srText, "me");
-      feed("", "Du (Mitschrift): " + srText.slice(-70));
-    };
-    liveSR.onerror = e => { if(e && e.error === "not-allowed"){ liveSR = null; } };
-    liveSR.onend = () => {
-      if(activeMode === "live" && liveSR){ try{ liveSR.start(); }catch(e){} }
-    };
-    liveSR.start();
-    feed("ok", "Deutsche Mitschrift an (läuft auf dem Handy)");
-  }catch(e){ liveSR = null; feed("w", "Mitschrift nicht verfügbar – es gilt Googles Transkript"); }
+/* Merker: hat Google deine Worte schon wieder in einer Fremdsprache mitgeschrieben? */
+function transcriptUnklar(t){
+  const x = String(t || "");
+  if(/[¿¡ñçêơưđ]/i.test(x)) return true;
+  if(/\b(el|la|los|las|que|como|estás|estas|entonces|vida|qué|dice|hablar|gracias|hola|bueno|pero)\b/i.test(x)) return true;
+  return false;
 }
-function stopLiveSR(){
-  try{ if(liveSR) liveSR.onend = null; liveSR.stop(); }catch(e){}
-  liveSR = null; srText = "";
-}
-function srAktiv(){ return !!liveSR && (Date.now() - srLast) < 60000; }
 
 /* ---------- Verbindung ---------- */
 function connect(){
@@ -849,7 +817,7 @@ function connect(){
     }
 
     if(msg.setupComplete){
-      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); try{ startLiveSR(); }catch(e){} }
+      if(!live) feed("ok", "Live-Sitzung steht – sie hört jetzt zu");
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -909,9 +877,17 @@ function connect(){
     if(!sc) return;
 
     if(sc.interrupted){ stopPlayback(); stopLocalSay(); setState("listening"); }
-    if(sc.inputTranscription && sc.inputTranscription.text && !liveSR){
-      if(lastMe) lastMe.textContent += sc.inputTranscription.text;
-      else lastMe = bubble(sc.inputTranscription.text, "me");
+    if(sc.inputTranscription && sc.inputTranscription.text){
+      const tr = sc.inputTranscription.text;
+      if(transcriptUnklar(tr)){
+        /* Google hat dein Deutsch als Spanisch/Vietnamesisch mitgeschrieben.
+           Verstanden hat sie dich trotzdem – aber solchen Unsinn zeigen wir nicht. */
+        if(!window.__trWarn){ window.__trWarn = 1; feed("w", "Googles Mitschrift kam fremdsprachig – ich lasse sie weg (verstanden wird trotzdem)"); }
+        if(!lastMe) lastMe = bubble("🎤 …", "me");
+      }else{
+        if(lastMe) lastMe.textContent += tr;
+        else lastMe = bubble(tr, "me");
+      }
     }
     if(sc.outputTranscription && sc.outputTranscription.text && !textLive()){
       if(lastHer) lastHer.textContent += sc.outputTranscription.text;
@@ -2251,7 +2227,6 @@ async function startConversation(){
   startPTT();
 }
 function stopConversation(){
-  stopLiveSR();
   S.resum = ""; save();              /* bewusst beendet: alte Sitzung nicht wieder aufwaermen */
   if(activeMode === "live"){ try{ disconnect(); }catch(e){} }
   if(rec){ try{ rec.abort(); }catch(e){ try{ rec.stop(); }catch(_){} } }
