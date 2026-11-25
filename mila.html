@@ -408,7 +408,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v3.6";
+const VERSION = "v3.7";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -709,7 +709,7 @@ function connect(){
     $("fallback").style.display = "block";
     setState("error"); talkBtn.disabled=false; reject(new Error("Mikrofon: " + (e.message||e))); return;
   }
-  feed("", "Mikrofon frei · baue Live-Sitzung auf · Modell " + (S.model || DEFAULT_MODEL) + " · Key …" + String(S.key).slice(-4));
+  feed("", "Mikrofon frei · baue Live-Sitzung auf · Modell " + (S.model || DEFAULT_MODEL) + " · " + netInfo());
   const url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key="
             + encodeURIComponent(S.key.trim());
   ws = new WebSocket(url);
@@ -886,7 +886,7 @@ function connect(){
       return;
     }
     feed("e", "Zeitüberschreitung · Leitung " + (offen ? "offen, aber Google antwortet nicht" : "kam nicht zustande"));
-    reject(new Error("Zeitüberschreitung beim Aufbau – " + (offen
+    reject(new Error("Zeitüberschreitung beim Aufbau (" + netInfo() + ") – " + (offen
       ? "die Leitung stand, Google hat aber in 30 s nicht bestätigt (meist Netz: WLAN probieren, oder Mobilfunk filtert wss://)"
       : "die Verbindung kam gar nicht zustande (wss:// wird blockiert – WLAN probieren, oder Datensparmodus/VPN aus)")));
   }, WARTE);
@@ -2308,6 +2308,14 @@ function feed(kind, text){
   el.scrollTop = el.scrollHeight;
   try{ console.log("[Mila " + t + "] " + kind + " " + text); }catch(e){}
 }
+/* Was für ein Netz hat das Handy gerade? (Mobilfunk filtert schon mal wss://) */
+function netInfo(){
+  try{
+    const c = navigator.connection || navigator.mozConnection || {};
+    const t = c.effectiveType ? String(c.effectiveType).toUpperCase() : "";
+    return (t || "Netz unbekannt") + (navigator.onLine ? " · online" : " · OFFLINE");
+  }catch(e){ return "Netz unbekannt"; }
+}
 function hardWarn(html){
   const h = $("hard");
   if(!h) return;
@@ -2381,5 +2389,5 @@ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
   $("hint").textContent = "Dieser Browser gibt kein Mikrofon frei – bitte Chrome/Edge, über https oder localhost";
 }
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a601c8dacf83469a',t:'MTc5NTYyMTU2OQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a601c8dacf83469a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
