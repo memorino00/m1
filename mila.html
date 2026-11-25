@@ -87,6 +87,16 @@
   .letzte{margin:10px auto 0;max-width:900px;font-size:13.5px;color:#dcdcf0;text-align:center;
     background:rgba(123,92,255,.10);border:1px solid rgba(123,92,255,.22);border-radius:12px;
     padding:8px 12px;min-height:0;display:none}
+  .chatbar{position:fixed;left:0;right:0;bottom:0;display:none;gap:8px;padding:10px 12px 14px;
+    background:rgba(13,11,28,.98);border-top:1px solid rgba(255,255,255,.08);z-index:40}
+  .chatbar input{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);
+    border-radius:12px;color:#fff;padding:11px 12px;font-size:15px}
+  .chatbar button{width:auto;padding:0 16px}
+  html.ansicht-text .chatbar{display:flex}
+  /* Startleiste nach oben, damit das Schreibfeld darunter Platz hat */
+  html.ansicht-text .startwrap{bottom:76px;z-index:39}
+  html.ansicht-text .talklog{padding-bottom:170px}
+
   .letzte b{color:#a99bff;font-weight:600;font-size:11px;letter-spacing:.4px;display:block;margin-bottom:2px}
   .letzte.an{display:block}
   .textkopf{max-width:760px;margin:0 auto;padding:10px 16px 0;display:flex;align-items:center;gap:8px}
@@ -184,6 +194,13 @@
 .microw{display:flex;gap:10px;align-items:flex-start;margin:10px 0 0;flex-wrap:wrap}
 .micout{flex:1;min-width:200px;font-size:12.5px;line-height:1.5;opacity:.85}
 .micout code{font-size:11.5px}
+  .hchip{position:fixed;left:14px;right:14px;bottom:104px;z-index:38;display:none;
+    padding:11px 14px;border-radius:14px;font-size:13.5px;font-weight:750;text-align:center;
+    background:rgba(255,184,77,.15);color:#ffd79a;border:1px solid rgba(255,184,77,.6);
+    backdrop-filter:blur(6px)}
+  html.ansicht-text .hchip{bottom:156px}
+  html.ansicht-proto .hchip{bottom:104px}
+  .hchip:active{transform:scale(.98)}
 </style>
 </head>
 <body>
@@ -197,6 +214,7 @@
   <button id="cfgBtn" title="Einstellungen">⚙</button>
 </header>
 
+<button id="wakeChip" class="hchip" title="Namensmodus ausschalten">🔔 Namensmodus AN – sie hört nur auf „Mila" · <u>antippen = aus</u></button>
 <div id="diag"><span><b>Selbsttest:</b></span> <span id="dScript">Skript …</span> <span id="dCtx">Kontext …</span> <span id="dMic">Mikro …</span> <span id="dKey">Key …</span> <span id="dProto">Protokoll …</span></div>
 <div class="microw">
   <button id="micCheck" class="ghost">🎙 Mikro prüfen</button>
@@ -240,6 +258,11 @@
   <span class="wt">Verlauf · nach links wischen: Protokoll · nach rechts: Animation</span>
 </div>
 <div class="talklog" id="log"></div>
+
+<div class="chatbar" id="chatbar">
+  <input type="text" id="chatInput" placeholder="Schreiben statt sprechen …" autocomplete="off" enterkeyhint="send">
+  <button id="chatSend">Senden</button>
+</div>
 
 <div id="toast"></div>
 
@@ -443,13 +466,37 @@ window.addEventListener("unhandledrejection", function(e){
       Wer es trotzdem probieren will: Häkchen setzen, dann wird das Audio des Satzes
       nachträglich an ein Transkriptions-Modell geschickt und ersetzt den Text.</div>
 
-    <label class="lb">Namensmodus: sie antwortet nur, wenn du „Mila" sagst</label>
+    <label class="lb">Namensmodus: sie antwortet nur, wenn du „Mila“ sagst</label>
     <select id="wakemode">
       <option value="aus" selected>Aus – normales Gespräch (sie antwortet immer)</option>
-      <option value="an">An – sie hört zu, sagt aber nur etwas, wenn du „Mila" sagst</option>
+      <option value="an">An – sie hört zu, sagt aber nur etwas, wenn du „Mila“ sagst</option>
     </select>
     <div class="foot">Im Namensmodus bleibt sie still, bis dein Name fällt. Sagen kannst du es auch:
       „Mila, Namensmodus" bzw. „Mila, normales Gespräch".</div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="wakeOff" class="ghost" style="flex:1">🔕 Namensmodus sofort aus</button>
+    </div>
+
+    <div class="lb" style="margin-top:14px">Namen üben · deine Aussprache anlernen</div>
+    <div class="foot">Google schreibt deinen Zuruf oft anders, als du ihn sagst („Mail“, „Mahl“, „Müller“).
+      Sprich „Mila“ hier einmal ein – ich lasse mir von Google sagen, was daraus wird, und merke mir genau diese
+      Schreibweise. Ab dann zählt sie als gerufen. Braucht den Key (die Erkennung läuft bei Google).</div>
+    <div class="row" style="margin-top:8px">
+      <button id="nameTrain" style="flex:1">🎙 „Mila“ einsprechen (3 s)</button>
+    </div>
+    <div class="foot" id="nameErg" style="min-height:20px">Noch nicht geübt.</div>
+    <div id="nameListe" class="foot" style="opacity:.85"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="nameHand" placeholder="selbst eintragen, z. B. Maila" style="flex:1">
+      <button id="nameAdd" class="ghost">+</button>
+      <button id="nameClear" class="ghost">leeren</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input id="nameTest" placeholder="Probe: was schreibt Google?" style="flex:1">
+      <button id="nameTestBtn" class="ghost">prüfen</button>
+    </div>
+    <div class="foot" id="nameTestErg" style="min-height:18px"></div>
 
     <label class="lb">Darf sie dich hören, während sie selbst spricht?</label>
     <select id="duplex">
@@ -491,6 +538,23 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="pbar" id="pbar"><i></i></div>
     <div class="foot" id="pstat"></div>
 
+    </details>
+
+    <details class="grp" id="grpbefehle"><summary>Sprachbefehle · was sie versteht</summary>
+      <div class="foot" style="margin:0 0 8px">Kurze Zurufe (bis 5 Wörter) oder alles mit <b>„Mila“</b> davor.
+        Sie quittiert jeden Befehl mit einer kurzen Meldung und kommentiert ihn nicht.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, zeig den Text"</td><td>Verlauf öffnen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Protokoll"</td><td>Protokoll öffnen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Animation" · „zurück"</td><td>zur Bühne</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Gespräch beenden" · „stopp"</td><td>Gespräch beenden</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„stumm" · „Mikro aus"</td><td>Mikrofon umschalten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„lauter" · „leiser"</td><td>Lautstärke</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
+      </table>
+      <div class="foot">Der Namensmodus akzeptiert auch ähnliche Schreibweisen: Mila, Milla, Mia, Myla – und kleine
+        Erkennungsfehler (bis zwei Buchstaben Abweichung).</div>
     </details>
 
     <details class="grp"><summary>Notreserve · Android-Stimme</summary>
@@ -582,7 +646,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.8";
+const VERSION = "v6.2";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -628,7 +692,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
+  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[],
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
@@ -742,7 +806,7 @@ function ansichtZurueck(){ zeigeAnsicht(ansicht === "proto" ? "text" : ansicht =
 function textUmschalten(){ ansichtWeiter(); }
 /* Alter Name bleibt funktionsfähig (wird an mehreren Stellen benutzt). */
 function zeigeText(ja, still){ zeigeAnsicht(ja ? "text" : "buehne", still); }
-try{ zeigeText(true, true); }catch(e){}   /* Start: Verlauf sichtbar */
+try{ zeigeAnsicht("buehne", true); }catch(e){}   /* Start: Bühne */
 
 function bubble(text, who){
   if(!text) return null;
@@ -1344,10 +1408,11 @@ function connect(){
       if(istBefehl(tr)){ rundeErlaubt = false; }
       /* 2) Namensmodus: nur antworten, wenn „Mila“ gefallen ist. */
       if(S.wake){
-        const gerufen = /\b(mila|milla|myla|mia|mile)\b/i.test(String(tr || ""));
+        const gerufen = nenntNamen(tr);
         rundeErlaubt = gerufen;
         if(!gerufen){
           try{ stopPlayback(); }catch(e){}
+          try{ lastHer = null; }catch(e){}
           feed("", "Namensmodus: kein „Mila“ gehört – Antwort unterdrückt");
         }
       }
@@ -1359,12 +1424,17 @@ function connect(){
       }else{
         if(lastMe) lastMe.textContent += tr;
         else lastMe = bubble(tr, "me");
+        /* Im Namensmodus, aber nicht gerufen: dein Satz bleibt stehen (sonst denkst du,
+           das Mikrofon ist tot) – aber markiert, damit keine Antwort erwartet wird. */
+        if(S.wake && !rundeErlaubt) taubBubble = lastMe;
         uhPlan(lastMe);
       }
     }
     if(sc.outputTranscription && sc.outputTranscription.text && !textLive()){
-      if(lastHer) lastHer.textContent += sc.outputTranscription.text;
-      else lastHer = bubble(sc.outputTranscription.text, "her");
+      if(!(S.wake && !rundeErlaubt)){      /* Namensmodus & nicht gerufen: nichts mitschreiben */
+        if(lastHer) lastHer.textContent += sc.outputTranscription.text;
+        else lastHer = bubble(sc.outputTranscription.text, "her");
+      }
     }
     if(sc.modelTurn && sc.modelTurn.parts){
       for(const p of sc.modelTurn.parts){
@@ -1373,12 +1443,20 @@ function connect(){
           playPcm(p.inlineData.data);
         }
         if(p.text){
-          if(lastHer) lastHer.textContent += p.text; else lastHer = bubble(p.text,"her");
-          if(textLive()) feedLiveText(p.text);   /* Handystimme uebernimmt das Vorlesen */
+          if(!(S.wake && !rundeErlaubt)){    /* Namensmodus & nicht gerufen: nichts schreiben */
+            if(lastHer) lastHer.textContent += p.text; else lastHer = bubble(p.text,"her");
+            if(textLive()) feedLiveText(p.text);   /* Handystimme uebernimmt das Vorlesen */
+          }
         }
       }
     }
     if(sc.turnComplete){
+      if(taubBubble){
+        const note = document.createElement("div");
+        note.className = "who"; note.style.opacity = ".55"; note.style.marginTop = "4px";
+        note.textContent = "nicht angesprochen · keine Antwort";
+        taubBubble.appendChild(note); taubBubble = null;
+      }
       rundeErlaubt = true;
       if(textLive()) flushLiveText();
       if(!sayBusy) setState(muted ? "muted" : "listening");
@@ -1599,6 +1677,7 @@ function fillCfg(){
   if($("reasr")) $("reasr").checked = S.reASR === true;
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
   if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
+  try{ wakeUi(); }catch(e){}
   if($("headphones")) $("headphones").checked = S.headphones === true;
   try{ modelListeFuellen(); }catch(e){}
   if($("micgain")){ const g = Number(S.micGain) || 1.8; $("micgain").value = Math.round(g*100);
@@ -1905,6 +1984,35 @@ $("sil").addEventListener("input", e => {
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
 if($("wakemode")) $("wakemode").addEventListener("change", e => namensmodus(e.target.value === "an"));
+
+/* Namensmodus sofort aus – der Schalter oben im Kopf und der Knopf in den Einstellungen */
+if($("wakeChip")) $("wakeChip").addEventListener("click", () => namensmodus(false));
+if($("wakeOff"))  $("wakeOff").addEventListener("click", () => { namensmodus(false); closeCfg(); });
+
+/* Namen üben */
+if($("nameTrain"))    $("nameTrain").addEventListener("click", () => nameUeben());
+if($("nameAdd"))      $("nameAdd").addEventListener("click", () => {
+  const i = $("nameHand"); if(!i) return;
+  const w = i.value.trim();
+  if(!w){ toast("Erst ein Wort eintragen."); return; }
+  const neu = nameMerken(w);
+  i.value = "";
+  toast(neu ? "Gemerkt: „" + w + "“ zählt als dein Name" : "War schon in der Liste", 5000);
+});
+if($("nameClear"))    $("nameClear").addEventListener("click", () => {
+  S.wakeWorte = []; save(); wakeUi();
+  const e = $("nameErg"); if(e) e.textContent = "Liste geleert.";
+});
+if($("nameTestBtn"))  $("nameTestBtn").addEventListener("click", () => {
+  const i = $("nameTest"), e = $("nameTestErg");
+  if(!i || !e) return;
+  const t = i.value.trim();
+  if(!t){ e.textContent = "Erst etwas eintragen."; return; }
+  const ja = nenntNamen(t);
+  e.innerHTML = ja
+    ? "<b>Ja</b> – würde als <b>gerufen</b> zählen"
+    : "<b>Nein</b> – würde <b>nicht</b> als gerufen zählen. Dann oben eintragen oder einsprechen";
+});
 if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
 if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
@@ -2200,18 +2308,218 @@ document.addEventListener("click", ev => {
 });
 
 /* =====================================================================
-   Namensmodus: sie bleibt still, bis „Mila" fällt.
+   Namensmodus: sie bleibt still, bis „Mila“ fällt.
    Erkannt wird das an Googles Mitschrift. Fällt der Name nicht, wird die
    Antwort dieser Runde verworfen (Ton gestoppt) – so muss das Modell nicht
    erst umprogrammiert werden.
    ===================================================================== */
 let rundeErlaubt = true;
+let taubBubble = null;     /* dein Satz, auf den sie bewusst NICHT geantwortet hat */
 function namensmodus(an){
   S.wake = !!an; save();
   if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
+  wakeUi();
   feed("", S.wake ? "Namensmodus AN – sie antwortet nur, wenn du „Mila“ sagst" : "Namensmodus aus – normales Gespräch");
   toast(S.wake ? "Namensmodus an: erst „Mila“ sagen" : "Normales Gespräch", 5000);
   if(activeMode === "live") reconnect("Namensmodus").catch(()=>{});   /* Systemtext neu senden */
+}
+
+/* Wird der Name genannt? Google schreibt „Mila“ mal als Mila, Milla, Mia, Müler …
+   Deshalb: bekannte Schreibweisen UND Tippfehler-Toleranz (Abstand ≤ 2). */
+/* ---------- Schalter-Anzeige oben: nur sichtbar, wenn der Namensmodus an ist ---------- */
+function wakeUi(){
+  const c = $("wakeChip");
+  if(c) c.style.display = S.wake ? "block" : "none";
+  const l = $("nameListe");
+  if(l){
+    const w = (S.wakeWorte || []);
+    l.innerHTML = w.length
+      ? "Gelernte Schreibweisen: <b>" + w.map(x => String(x).replace(/</g,"&lt;")).join(", ") + "</b>"
+      : "Noch keine eigenen Schreibweisen gespeichert.";
+  }
+}
+function eigeneWorte(){
+  return (S.wakeWorte || []).map(w => String(w).toLowerCase().trim()).filter(w => w.length > 1);
+}
+function nameMerken(wort){
+  const w = String(wort || "").toLowerCase().replace(/[^a-zäöüß\s]/g," ").replace(/\s+/g," ").trim();
+  if(w.length < 2) return false;
+  const liste = S.wakeWorte || (S.wakeWorte = []);
+  if(liste.includes(w)) return false;
+  liste.push(w); save(); wakeUi(); return true;
+}
+
+/* ---------- Aufnahme für das Namen-Üben ---------- */
+async function nameAufnahme(sek){
+  const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx(); try{ await ctx.resume(); }catch(e){}
+  const src = ctx.createMediaStreamSource(stream);
+  const node = ctx.createScriptProcessor(2048, 1, 1);
+  const teile = [];
+  node.onaudioprocess = e => teile.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(node); node.connect(ctx.destination);
+  await new Promise(r => setTimeout(r, Math.round(sek * 1000)));
+  try{ node.disconnect(); src.disconnect(); }catch(e){}
+  stream.getTracks().forEach(t => t.stop());
+  const rate = ctx.sampleRate;
+  try{ await ctx.close(); }catch(e){}
+  const n = teile.reduce((a,b) => a + b.length, 0);
+  const alle = new Float32Array(n); let o = 0;
+  for(const t of teile){ alle.set(t, o); o += t.length; }
+  return { pcm: alle, rate };
+}
+function pcmZuWav16k(pcm, rate){
+  const ziel = 16000, faktor = rate / ziel;
+  const n = Math.max(1, Math.floor(pcm.length / faktor));
+  const out = new Float32Array(n);
+  for(let i = 0; i < n; i++){
+    const a = Math.floor(i * faktor), b = Math.min(pcm.length, Math.floor((i + 1) * faktor));
+    let sum = 0, c = 0;
+    for(let j = a; j < b; j++){ sum += pcm[j]; c++; }
+    out[i] = c ? sum / c : 0;
+  }
+  const pcm16 = new Int16Array(n);
+  for(let i = 0; i < n; i++){
+    const v = Math.max(-1, Math.min(1, out[i]));
+    pcm16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const head = new DataView(new ArrayBuffer(44));
+  const wr = (o2, t) => { for(let k = 0; k < t.length; k++) head.setUint8(o2 + k, t.charCodeAt(k)); };
+  wr(0,"RIFF"); head.setUint32(4, 36 + n*2, true); wr(8,"WAVEfmt ");
+  head.setUint32(16,16,true); head.setUint16(20,1,true); head.setUint16(22,1,true);
+  head.setUint32(24,ziel,true); head.setUint32(28,ziel*2,true); head.setUint16(32,2,true); head.setUint16(34,16,true);
+  wr(36,"data"); head.setUint32(40, n*2, true);
+  const all = new Uint8Array(44 + n*2);
+  all.set(new Uint8Array(head.buffer), 0);
+  all.set(new Uint8Array(pcm16.buffer), 44);
+  return all;
+}
+async function nameHören(wav){
+  const b64 = b64encode(wav);
+  for(const modell of [ASR_MODEL, TEXT_MODEL]){
+    try{
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modell + ":generateContent?key=" + encodeURIComponent(S.key);
+      const res = await fetch(url, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [
+            { inlineData: { mimeType: "audio/wav", data: b64 } },
+            { text: "Der Sprecher ruft einen Vornamen. Transkribiere wörtlich, was du hörst – auf Deutsch, nur das gehörte Wort bzw. die Wörter, ohne Anführungszeichen und ohne Erklärung. Ist nichts zu hören, gib nichts zurück." }
+          ]}],
+          generationConfig: { temperature: 0, maxOutputTokens: 40 }
+        })
+      });
+      const j = await res.json();
+      if(j.error) throw new Error(j.error.message || "Fehler");
+      let t = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+                .map(x => x.text || "").join("").trim();
+      t = t.replace(/^["„»'‚]+|["“«'‘]+$/g, "").trim();
+      if(t.length > 1) return t;
+    }catch(e){ /* nächstes Modell */ }
+  }
+  return "";
+}
+async function nameUeben(){
+  if(!S.key){ toast("Kein Key – ⚙ oben rechts eintragen.", 6000); return; }
+  if(live){ toast("Bitte erst das Gespräch beenden – das Mikrofon ist belegt.", 6000); return; }
+  const btn = $("nameTrain"), erg = $("nameErg");
+  if(!btn) return;
+  btn.disabled = true; btn.textContent = "🎙 Aufnahme läuft – jetzt „Mila“ sagen …";
+  if(erg) erg.innerHTML = "Ich nehme 3 Sekunden auf. Sag jetzt deutlich <b>Mila</b>.";
+  try{
+    const { pcm, rate } = await nameAufnahme(3);
+    if(erg) erg.textContent = "Aufnahme fertig – ich frage Google, was sie verstanden hat …";
+    const text = await nameHören(pcmZuWav16k(pcm, rate));
+    if(!text){
+      if(erg) erg.innerHTML = "<b>Nichts verstanden.</b> Nochmal, bitte lauter und näher am Mikrofon.";
+      return;
+    }
+    const neu = nameMerken(text);
+    if(erg) erg.innerHTML = "Google schreibt dein „Mila“ als <b>„" + String(text).replace(/</g,"&lt;") + "“</b>. "
+      + (neu ? "Gemerkt – das zählt ab jetzt als gerufen." : "War schon in der Liste.");
+    feed("", "Namen geübt: erkannt als „" + text + "“");
+  }catch(e){
+    if(erg) erg.textContent = "Aufnahme ging nicht: " + (e.message || e);
+  }finally{
+    btn.disabled = false; btn.textContent = "🎙 „Mila“ einsprechen (3 s)";
+  }
+}
+
+/* Kölner Phonetik: vergleicht, wie ein Wort KLINGT (deutsch).
+   Damit fallen „Mail“, „Mahl“, „Meile“, „Mühle“ mit „Mila“ zusammen –
+   genau die Wörter, die Google statt des Namens schreibt. */
+function koelnerCode(wort){
+  let w = String(wort || "").toLowerCase()
+    .replace(/ä/g,"a").replace(/ö/g,"o").replace(/ü/g,"u").replace(/ß/g,"ss")
+    .replace(/[^a-z]/g,"");
+  if(!w) return "";
+  const code = [];
+  for(let i = 0; i < w.length; i++){
+    const c = w[i], vor = w[i-1] || "", nach = w[i+1] || "";
+    let z = "";
+    if("aeijouy".includes(c)) z = "0";
+    else if(c === "h") z = "";
+    else if(c === "b") z = "1";
+    else if(c === "p") z = "3";
+    else if(c === "d" || c === "t") z = "2";
+    else if("fvw".includes(c)) z = "3";
+    else if("gkq".includes(c)) z = "4";
+    else if(c === "c"){
+      if(i === 0){ z = /[ahkloqrux]/.test(nach) ? "4" : "8"; }
+      else { z = /[ahkoqux]/.test(vor) ? (/[ahkoqux]/.test(nach) ? "4" : "8") : (/[ahkoqux]/.test(nach) ? "8" : "4"); }
+    }
+    else if(c === "x") z = /[ahkoqux]/.test(vor) ? "8" : "48";
+    else if(c === "l") z = "5";
+    else if(c === "m" || c === "n") z = "6";
+    else if(c === "r") z = "7";
+    else if(c === "s" || c === "z") z = "8";
+    if(z) code.push(z);
+  }
+  /* erste Ziffer behalten, danach Doppelte und Nullen entfernen */
+  let out = code.length ? code[0] : "";
+  for(let i = 1; i < code.length; i++) if(code[i] !== code[i-1] && code[i] !== "0") out += code[i];
+  return out;
+}
+
+function nenntNamen(text){
+  const roh = String(text || "").toLowerCase()
+    .replace(/[^a-zäöüß\s]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  if(!roh) return false;
+  const fest = ["mila","milla","myla","miela","milah","mia","mirla","mile","milla","müller","muller","muela"];
+  const woerter = roh.split(" ");
+  const abstand = (a, b) => {
+    const m = a.length, n = b.length;
+    const d = Array.from({length: m + 1}, (_, i) => [i].concat(new Array(n).fill(0)));
+    for(let j = 0; j <= n; j++) d[0][j] = j;
+    for(let i = 1; i <= m; i++) for(let j = 1; j <= n; j++)
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    return d[m][n];
+  };
+  const eigene = eigeneWorte();
+  if(eigene.length){
+    if(eigene.includes(roh)) return true;
+    for(const e of eigene){
+      if(e.includes(" ")){ if(roh.includes(e)) return true; }
+      else if(woerter.includes(e)) return true;
+    }
+  }
+  const kurz = woerter.length <= 4;          /* Zuruf, kein langer Satz */
+  const ziel = koelnerCode("mila");          /* „65“ */
+  const kurzZiel = koelnerCode("mia");       /* „6“  */
+  for(const w of woerter){
+    if(fest.includes(w)) return true;
+    /* Tippfehler: ein Buchstabe Abweichung */
+    if(w.length >= 3 && w.length <= 6 && abstand(w, "mila") <= 1) return true;
+    /* Klang: greift nur bei kurzen Zurufen – so löst „Das ist eine Mail für dich“ nicht aus */
+    if(kurz && w.length >= 2 && w.length <= 7){
+      const c = koelnerCode(w);
+      if(c && c === ziel) return true;
+      if(c && c === kurzZiel && w.length <= 4) return true;
+    }
+  }
+  return false;
 }
 
 /* ---------- Sprachbefehle ---------- */
@@ -2399,6 +2707,33 @@ function diagnose(){
 }
 
 /* --- Notbetrieb: schreiben statt sprechen --- */
+/* Schreiben statt sprechen – im Gespräch geht es live raus (sie antwortet mit Stimme),
+   ohne Gespräch über das normale Modell plus Handy-/Gemini-Stimme. */
+async function sendeTextJetzt(){
+  const inp = $("chatInput");
+  if(!inp) return;
+  const text = inp.value.trim();
+  if(!text) return;
+  inp.value = "";
+  const zeile = bubble(text, "me");
+  if(live && ws && ws.readyState === 1){
+    try{
+      rundeErlaubt = true;   /* getippt = bewusst angesprochen, Namensmodus gilt hier nicht */
+      ws.send(JSON.stringify({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } }));
+      feed("", "getippt: " + text.slice(0, 60));
+      return;
+    }catch(e){ /* unten weiter mit dem Textweg */ }
+  }
+  if(!S.key){ toast("Kein Key – ⚙ oben rechts eintragen."); return; }
+  try{
+    const antwort = await askText(text);
+    bubble(antwort, "her");
+    try{ await speakText(antwort); }catch(e){}
+  }catch(e){
+    bubble("Fehler: " + (e.message || e), "her");
+  }
+}
+
 async function fbSend(){
   const inp = $("fbInput"); const text = inp.value.trim(); if(!text) return;
   inp.value = "";
@@ -3199,7 +3534,7 @@ function stopConversation(){
   talkBtn.textContent = "Gespräch starten";
   talkBtn.classList.remove("live");
   setState("idle");
-  try{ zeigeText(true, true); }catch(e){}
+  try{ zeigeAnsicht("buehne", true); }catch(e){}
 }
 
 /* ================= Google Drive (nur lesend) ================= */
@@ -3392,6 +3727,10 @@ function forceGerman(){
 $("forceDe").onclick = forceGerman;
 $("cfgBtn").onclick = openCfg;
 if($("textToggle")) $("textToggle").onclick = textUmschalten;
+if($("chatSend")) $("chatSend").onclick = sendeTextJetzt;
+if($("chatInput")) $("chatInput").addEventListener("keydown", e => {
+  if(e.key === "Enter"){ e.preventDefault(); sendeTextJetzt(); }
+});
 if($("protoCopy")) $("protoCopy").onclick = async () => {
   const t = $("feed") ? $("feed").innerText : "";
   try{ await navigator.clipboard.writeText(t); toast("Protokoll kopiert (" + t.length + " Zeichen).", 4000); }
