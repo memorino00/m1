@@ -299,6 +299,14 @@ window.addEventListener("unhandledrejection", function(e){
       <label class="lb">Verstärkung: <span id="gainv2">1,8</span>×</label>
       <input type="range" id="micgain2" min="100" max="400" step="10" value="180">
 
+      <label class="lb" style="display:flex;gap:8px;align-items:center;margin-top:10px">
+        <input type="checkbox" id="rawmic" style="width:auto"> Mikrofon-Verarbeitung des Handys aus (roher Ton)
+      </label>
+      <div class="foot">Android dämpft das Mikrofon stark: Rausch- und Echounterdrückung schneiden die hohen
+        Konsonanten weg – genau die, an denen die Erkennung hängt. Mit diesem Häkchen geht der <b>unbearbeitete</b> Ton
+        an Google. <b>Bitte nur mit Kopfhörern</b>, sonst hört das Mikrofon Mila selbst und sie unterbricht sich.
+        Wirkt ab dem nächsten Gesprächsstart.</div>
+
       <div class="row" style="margin-top:10px">
         <button id="eqtest">Pegel testen</button>
         <button id="eqreset" class="ghost">Alles zurücksetzen</button>
@@ -496,7 +504,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.9";
+const VERSION = "v5.0";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -539,7 +547,7 @@ let S = {
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
   sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
-  eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 },
+  eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -556,6 +564,10 @@ function load(){ try{ const r=localStorage.getItem(LS); if(r) S=Object.assign(S,
   /* v4.9: 2,2 s waren zu träge – das Gespräch wurde zur Frage-Antwort-Runde.
      Jetzt 1,2 s; wenn du weiterredest, bricht sie sofort ab (siehe Regel unten). */
   if(!S.silMigriert2){ if(Number(S.sil) > 1600) S.sil = 1200; S.silMigriert2 = true; }
+  /* v5.0: Der zweite Transkriptions-Durchgang hat im echten Betrieb die brauchbare
+     Mitschrift mit Unsinn überschrieben („Nerv. Nerv. Nerv.") und gebremst.
+     Einmal hart aus – wer ihn will, kann ihn wieder einschalten. */
+  if(!S.reASRaus){ S.reASR = false; S.reASRaus = true; save(); }
   if(!S.duplex) S.duplex = "full";
   if(!S.pttGrace) S.pttGrace = 1600;
   if(!S.sysRate)  S.sysRate = 1.0;
@@ -841,9 +853,15 @@ async function uhRun(){
 
 async function startAudio(){
   try{ stopEQPreview(); }catch(e){}     /* nur EIN Mikrofon gleichzeitig */
-  micStream = await navigator.mediaDevices.getUserMedia({
-    audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true }
-  });
+  /* Android-Chrome filtert Mikrofon-Ton standardmäßig stark (Rauschunterdrückung,
+     Echounterdrückung). Das klingt sauber, schneidet aber genau die Konsonanten
+     weg, die zur Erkennung nötig sind. Abschaltbar – dann kommt roher Ton an. */
+  const roh = !!S.rawMic;
+  const tonBedingungen = roh
+    ? { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    : { channelCount:1, echoCancellation:true,  noiseSuppression:true,  autoGainControl:true  };
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: tonBedingungen });
+  if(roh) feed("", "Mikrofon-Verarbeitung aus – roher Ton geht an Google");
 
   /* 16 kHz ist das, was die Live-API erwartet. Wenn das Geraet das nicht kann,
      NICHT luegen: dann den echten Takt nehmen und mitschicken. */
@@ -1395,6 +1413,7 @@ function fillCfg(){
   $("sil").value = Number(S.sil) || 2200;
   $("silv").textContent = ((Number(S.sil) || 2200) / 1000).toFixed(1).replace(".", ",");
   if($("reasr")) $("reasr").checked = S.reASR === true;
+  if($("rawmic")) $("rawmic").checked = S.rawMic === true;
   if($("micgain")){ const g = Number(S.micGain) || 1.8; $("micgain").value = Math.round(g*100);
     if($("gainv")) $("gainv").textContent = g.toFixed(1).replace(".", ","); }
   $("duplex").value = S.duplex || "full";
@@ -1701,6 +1720,10 @@ $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save();
 if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
 if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
+if($("rawmic")) $("rawmic").addEventListener("change", e => {
+  S.rawMic = e.target.checked; save();
+  toast(S.rawMic ? "Roher Mikrofon-Ton – wirkt beim nächsten Gesprächsstart" : "Handy-Verarbeitung wieder an", 6000);
+});
 
 /* =====================================================================
    Eingangs-Anzeige: Spektrum-Kurve + Pegel.
@@ -1813,8 +1836,31 @@ function eqDraw(){
   else if(db < -32){ urteil = "zu leise – näher ans Mikro oder Verstärkung hoch"; farbe = "#ffd166"; }
   else { eqClipZaehler = 0; urteil = "gut"; farbe = "#41d6a3"; }
   if(eqClipZaehler > 30){ urteil = "dauerhaft übersteuert – Verstärkung deutlich runter"; }
+  /* Höhen-Anteil: ohne Energie über 2 kHz versteht jede Erkennung die Konsonanten nicht. */
+  let hoehen = null;
+  if(an){
+    const bins = an.frequencyBinCount;
+    const k = new Uint8Array(bins);
+    an.getByteFrequencyData(k);
+    const proBin = (an.context.sampleRate / 2) / bins;
+    let unten = 0, oben = 0;
+    for(let i = 1; i < bins; i++){
+      const f = i * proBin;
+      if(f > 8000) break;
+      if(f >= 2000) oben += k[i]; else unten += k[i];
+    }
+    if(unten + oben > 40) hoehen = Math.round(oben / (unten + oben) * 100);
+  }
   const m = $("eqmeter");
-  if(m) m.innerHTML = "Pegel <b style='color:" + farbe + "'>" + (db <= -99 ? "–" : db + " dB") + "</b> · " + urteil;
+  if(m){
+    let zusatz = "";
+    if(hoehen !== null){
+      if(hoehen < 4)       zusatz = " · <b style='color:#ff5470'>Höhen fehlen (" + hoehen + " % über 2 kHz)</b> – Häkchen „roher Ton“ setzen, sonst versteht keine Erkennung deine Konsonanten";
+      else if(hoehen < 10) zusatz = " · <b style='color:#ffd166'>wenig Höhen (" + hoehen + " %)</b> – „Deutlichkeit“ hoch oder roher Ton";
+      else                 zusatz = " · Höhen " + hoehen + " % ok";
+    }
+    m.innerHTML = "Pegel <b style='color:" + farbe + "'>" + (db <= -99 ? "–" : db + " dB") + "</b> · " + urteil + zusatz;
+  }
 
   eqDrawId = requestAnimationFrame(eqDraw);
 }
