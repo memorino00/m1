@@ -280,6 +280,13 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="foot">Kurz = zackig, aber sie fällt dir ins Wort. Lang = sie lässt dich denken, wirkt aber träger.
       Wenn du mitten im Satz Luft holst und sie sofort loslegt: hochdrehen.</div>
 
+    <label class="lb" style="display:flex;gap:8px;align-items:center;margin-top:10px">
+      <input type="checkbox" id="reasr" style="width:auto"> Mitschrift nachhören (2. Durchgang, genauer)
+    </label>
+    <div class="foot">Google schreibt kurze Wörter manchmal daneben („super“ → „Zucker“).
+      Dann schicke ich das Audio des Satzes nachträglich an ein reines Transkriptions-Modell und ersetze den Text.
+      Kostet ein Extra-Anfrage pro Satz – bei aufgebrauchtem Kontingent bleibt einfach die erste Mitschrift stehen.</div>
+
     <label class="lb">Darf sie dich hören, während sie selbst spricht?</label>
     <select id="duplex">
       <option value="full" selected>Ja – sie bricht ab, sobald du reinredest (echtes Gespräch)</option>
@@ -409,7 +416,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.3";
+const VERSION = "v4.4";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -446,7 +453,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:2200, duplex:"full", resum:"", stats:true,
+  sil:2200, duplex:"full", resum:"", stats:true, reASR:true,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -570,6 +577,7 @@ function onMicChunk(f32){
   if(sayBusy) return;                      // Handystimme laeuft – nicht sich selbst zuhoeren
   // Halbdialog: waehrend sie spricht, geht kein Mikro raus (Echo-Schutz)
   if(S.duplex === "half" && state === "speaking") return;
+  uhPush(f32);
   const pcm = floatToPcm16(f32);
   try{
     ws.send(JSON.stringify({
@@ -579,6 +587,88 @@ function onMicChunk(f32){
   }catch(e){ /* Socket im Umbau – Chunk verwerfen, nicht die App */ }
 }
 let micBars = [];
+
+/* =====================================================================
+   Zweiter Durchgang für die Mitschrift.
+   Das Mikrofon-Audio läuft ohnehin durch diese Seite – ich hebe die letzten
+   Sekunden auf und schicke sie NACH dem Satz an ein reines Transkriptions-
+   Modell. Der Text ersetzt dann Googles erste, ungenaue Mitschrift.
+   Kostet nichts extra an Geräten, nur eine Anfrage pro gesprochenem Satz.
+   ===================================================================== */
+let uhBuf = [], uhN = 0, uhTimer = null, uhZiel = null;
+function uhRate(){ return capCtx ? capCtx.sampleRate : 16000; }
+function uhPush(f32){
+  if(!S.reASR) return;
+  uhBuf.push(f32); uhN += f32.length;
+  const max = uhRate() * 30;
+  while(uhN > max && uhBuf.length > 1){ uhN -= uhBuf.shift().length; }
+}
+function uhClear(){ uhBuf = []; uhN = 0; }
+function uhWav(sec){
+  const rate = uhRate();
+  const want = Math.min(uhN, Math.round(rate * sec));
+  if(want < rate * 0.4) return null;
+  const pcm = new Int16Array(want);
+  let k = want - 1, i = uhBuf.length - 1;
+  while(k >= 0 && i >= 0){
+    const b = uhBuf[i--];
+    for(let j = b.length - 1; j >= 0 && k >= 0; j--){
+      let v = Math.max(-1, Math.min(1, b[j]));
+      pcm[k--] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    }
+  }
+  const head = new DataView(new ArrayBuffer(44));
+  const wr = (o, t) => { for(let n = 0; n < t.length; n++) head.setUint8(o + n, t.charCodeAt(n)); };
+  wr(0, "RIFF"); head.setUint32(4, 36 + want * 2, true); wr(8, "WAVEfmt ");
+  head.setUint32(16, 16, true); head.setUint16(20, 1, true); head.setUint16(22, 1, true);
+  head.setUint32(24, rate, true); head.setUint32(28, rate * 2, true); head.setUint16(32, 2, true); head.setUint16(34, 16, true);
+  wr(36, "data"); head.setUint32(40, want * 2, true);
+  const all = new Uint8Array(44 + want * 2);
+  all.set(new Uint8Array(head.buffer), 0);
+  all.set(new Uint8Array(pcm.buffer), 44);
+  return all;
+}
+function uhPlan(ziel){
+  if(!S.reASR) return;
+  uhZiel = ziel || null;
+  clearTimeout(uhTimer);
+  uhTimer = setTimeout(uhRun, 800);
+}
+async function uhRun(){
+  if(!S.key) return;
+  const wav = uhWav(14);
+  if(!wav) return;
+  uhClear();
+  const ziel = uhZiel; uhZiel = null;
+  const b64 = b64encode(wav);
+  for(const modell of [ASR_MODEL, TEXT_MODEL]){
+    try{
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modell + ":generateContent?key=" + encodeURIComponent(S.key);
+      const res = await fetch(url, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [
+            { inlineData: { mimeType: "audio/wav", data: b64 } },
+            { text: "Transkribiere diesen Ausschnitt wörtlich auf Deutsch. Gib nur den gesprochenen Text zurück – keine Anführungszeichen, keine Erklärung. Ist nichts zu hören, gib nichts zurück." }
+          ]}],
+          generationConfig: { temperature: 0, maxOutputTokens: 220 }
+        })
+      });
+      const j = await res.json();
+      if(j.error) throw new Error(j.error.message || "Fehler");
+      let t = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+                .map(x => x.text || "").join("").trim();
+      t = t.replace(/^["„»'‚]+|["“«'‘]+$/g, "").trim();
+      if(t.length > 1){
+        if(ziel && ziel.isConnected) ziel.textContent = t;
+        else bubble(t, "me");
+        feed("", "Mitschrift nachgehört (" + modell + "): " + t.slice(0, 70));
+        return;
+      }
+      /* leer = nichts verstanden → beim nächsten Modell versuchen */
+    }catch(e){ /* nächstes Modell */ }
+  }
+}
 
 async function startAudio(){
   micStream = await navigator.mediaDevices.getUserMedia({
@@ -897,6 +987,7 @@ function connect(){
       }else{
         if(lastMe) lastMe.textContent += tr;
         else lastMe = bubble(tr, "me");
+        uhPlan(lastMe);
       }
     }
     if(sc.outputTranscription && sc.outputTranscription.text && !textLive()){
@@ -1088,8 +1179,9 @@ function fillCfg(){
   $("lang").value = S.lang; $("briefing").value = S.briefing; $("vad").value = S.vad || "auto";
   $("ttsmodel").value = S.ttsModel || TTS_CANDIDATES[0];
   if(S.ttsVoice) $("ttsvoice").value = S.ttsVoice;
-  $("sil").value = Number(S.sil) || 1200;
-  $("silv").textContent = ((Number(S.sil) || 1200) / 1000).toFixed(1).replace(".", ",");
+  $("sil").value = Number(S.sil) || 2200;
+  $("silv").textContent = ((Number(S.sil) || 2200) / 1000).toFixed(1).replace(".", ",");
+  if($("reasr")) $("reasr").checked = S.reASR !== false;
   $("duplex").value = S.duplex || "full";
   $("grace").value = Number(S.pttGrace) || 1600;
   $("gracev").textContent = ((Number(S.pttGrace) || 1600)/1000).toFixed(1).replace(".", ",");
@@ -1104,7 +1196,7 @@ function applyCfg(){
   S.vad=$("vad").value;
   S.ttsModel=$("ttsmodel").value.trim() || TTS_CANDIDATES[0];
   S.ttsVoice=$("ttsvoice").value || "Kore";
-  S.sil=Number($("sil").value) || 1200;
+  S.sil=Number($("sil").value) || 2200;
   S.duplex=$("duplex").value || "full";
   S.pttGrace=Number($("grace").value) || 1600;
   S.sysVoice=$("sysvoice") ? $("sysvoice").value : S.sysVoice;
@@ -1386,11 +1478,12 @@ $("voiceTest").onclick = liveSpeakTest;
 
 /* Pause-Regler: sofort uebernehmen, auch mitten im Gespraech erklaeren */
 $("sil").addEventListener("input", e => {
-  S.sil = Number(e.target.value) || 1200;
+  S.sil = Number(e.target.value) || 2200;
   $("silv").textContent = (S.sil/1000).toFixed(1).replace(".", ",");
   save();
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
+if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
 
 /* Kreis antippen = sie hoert sofort auf zu reden */
 $("halo").addEventListener("click", interruptHer);
@@ -1504,6 +1597,9 @@ async function fbSend(){
    Ziel: Es gibt immer einen Weg, mit Mila zu reden.
    ===================================================================== */
 const TEXT_MODEL = "gemini-3.5-flash-lite";
+/* Reines Transkriptions-Modell für den zweiten Durchgang; wenn es das nicht gibt,
+   fällt der Code selbst auf TEXT_MODEL zurück. */
+const ASR_MODEL = "gemini-3.5-transcribe";
 /* Kurz antworten = weniger Tokens = Kontingent haelt laenger. Und klingt im Gespraech besser. */
 function DRIVE_PART(){
   if(!S.driveUse || !S.driveWissen) return "";
@@ -2237,6 +2333,7 @@ async function startConversation(){
   startPTT();
 }
 function stopConversation(){
+  uhClear(); clearTimeout(uhTimer);
   S.resum = ""; save();              /* bewusst beendet: alte Sitzung nicht wieder aufwaermen */
   if(activeMode === "live"){ try{ disconnect(); }catch(e){} }
   if(rec){ try{ rec.abort(); }catch(e){ try{ rec.stop(); }catch(_){} } }
