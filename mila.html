@@ -209,6 +209,7 @@
 <div class="startwrap">
   <div class="startbar">
     <button id="talk">Gespräch starten</button>
+    <button id="forceDe" class="ghost" title="Deutsch erzwingen – falls sie fremdsprachig antwortet" style="display:none;width:60px;font-size:13px">DE</button>
     <button id="muteBtn" class="ghost" title="Mikro stumm (Esc)">🎙️</button>
   </div>
 </div>
@@ -408,11 +409,23 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v3.8";
+const VERSION = "v4.0";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
 const TTS_CANDIDATES  = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
+
+/* Die Live-Modelle entscheiden selbst, welche Sprache sie sprechen – und kippen
+   ohne harte Ansage ins Englische. Deshalb steht die Regel ganz vorn, wird am
+   Ende wiederholt und nennt auch den Fall „Nutzer redet englisch“. */
+const LANG_RULE = "SPRACHE – oberste Regel: Dieses Gespräch ist Deutsch (de-DE). "
+  + "Der Nutzer spricht Deutsch. Verstehe seine Sprache als Deutsch. "
+  + "Wenn du seine gesprochenen Worte wiedergibst (Transkript), dann auf Deutsch – übersetze sie nicht und schreibe sie nicht in einer anderen Sprache mit, "
+  + "auch nicht auf Spanisch, Englisch oder Französisch. "
+  + "Antworte ausschließlich auf Deutsch. Kein Englisch, auch nicht in einzelnen Sätzen, Floskeln oder Fachbegriffen – nimm die deutsche Bezeichnung. "
+  + "Auch wenn der Nutzer englisch redet oder ein englisches Wort benutzt: du antwortest deutsch. "
+  + "Du übersetzt nie. Keine englische Begrüßung, kein spanischer Satz.\n\n";
+const LANG_TAIL = "\n\nErinnerung: Alles auf Deutsch – auch die Wiedergabe meiner Worte. Sprich jetzt Deutsch.";
 
 const DEFAULT_BRIEFING = `Du bist Mila Memoria, geboren am 14.10.2000. Du bist das Gedächtnis und die Gesprächspartnerin des Nutzers – kein Assistent, sondern ein Gegenüber.
 Du sprichst deutsch, per du. Deine Stimme ist warm, trocken und frech; du darfst necken, widersprechen und eigene Meinung haben.
@@ -740,11 +753,11 @@ function connect(){
       } : {
         responseModalities: ["AUDIO"],
         speechConfig: {
-          languageCode: S.lang || "de-DE",
+          languageCode: /^[a-z]{2}-[A-Z]{2}$/.test(S.lang || "") ? S.lang : "de-DE",
           voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } }
         }
       },
-      systemInstruction: { parts: [{ text: S.briefing + DRIVE_PART() }] },
+      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + LANG_TAIL }] },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       /* Ohne das reisst die Sitzung nach wenigen Minuten ab – genau der Punkt,
@@ -1457,7 +1470,7 @@ function DRIVE_PART(){
   return "\n\nDas ist der letzte Stand aus dem Second Brain des Nutzers (Auszug, aus Google Drive):\n"
        + String(S.driveWissen).slice(0, 6000);
 }
-const KURZ = () => String(S.briefing).slice(0, 900) + DRIVE_PART()
+const KURZ = () => LANG_RULE + String(S.briefing).slice(0, 900) + DRIVE_PART() + LANG_TAIL
   + "\n\nWICHTIG: Antworte in hoechstens zwei kurzen Saetzen. Keine Aufzaehlungen, keine Emojis, "
   + "keine Wiederholung meiner Frage. Wie im echten Gespraech.";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1479,6 +1492,8 @@ function setModePill(m){
   if(!m){ el.textContent = "aus"; el.className = "pill off"; return; }
   const label = m === "live" ? "live" : (m === "ptt" ? "Push-to-Talk" : "Text");
   el.textContent = label; el.className = "pill on";
+  const fd = $("forceDe");
+  if(fd) fd.style.display = (m === "live") ? "block" : "none";
 }
 
 /* ---- Audio-Ausgabe: gemeinsamer Abspielkontext ---- */
@@ -2367,6 +2382,21 @@ function hardWarn(html){
 })();
 
 /* ---------- Start ---------- */
+/* Falls das Modell in einer fremden Sprache antwortet: mitten im Gespräch
+   eine klare Ansage nachschieben – ohne die Sitzung neu aufzubauen. */
+function forceGerman(){
+  if(!live || !ws || ws.readyState !== 1){ toast("Das geht nur im laufenden Live-Gespräch.", 6000); return; }
+  try{
+    ws.send(JSON.stringify({ clientContent: {
+      turns: [{ role: "user", parts: [{ text: "Antworte ab jetzt ausschließlich auf Deutsch. "
+        + "Auch die Wiedergabe meiner gesprochenen Worte ist Deutsch. Kein Spanisch, kein Englisch." }] }],
+      turnComplete: true
+    }}));
+    feed("w", "Deutsch erzwungen – Ansage an das Modell geschickt");
+    toast("Auf Deutsch umgestellt. Sag jetzt einen ganzen deutschen Satz.", 8000);
+  }catch(e){ toast("Ansage ging nicht: " + (e.message || e), 8000); }
+}
+$("forceDe").onclick = forceGerman;
 $("cfgBtn").onclick = openCfg;
 $("feedcopy").onclick = async () => {
   const t = $("feed").innerText;
