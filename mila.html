@@ -302,6 +302,12 @@ window.addEventListener("unhandledrejection", function(e){
       <label class="lb" style="display:flex;gap:8px;align-items:center;margin-top:10px">
         <input type="checkbox" id="rawmic" style="width:auto"> Mikrofon-Verarbeitung des Handys aus (roher Ton)
       </label>
+      <label class="lb" style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <input type="checkbox" id="headphones" style="width:auto"> Ich trage Kopfhörer
+      </label>
+      <div class="foot" id="echohinweis">Ohne Kopfhörer hört das Mikrofon Mila selbst – dann antwortet sie auf ihr eigenes
+        Sprechen und unterbricht sich dauernd. In dem Fall lässt die App dein Mikrofon automatisch stumm, solange sie redet
+        (<b>Echo-Schutz</b>). Mit Kopfhörer-Häkchen bleibt das freie Dazwischenreden erhalten.</div>
       <div class="foot">Android dämpft das Mikrofon stark: Rausch- und Echounterdrückung schneiden die hohen
         Konsonanten weg – genau die, an denen die Erkennung hängt. Mit diesem Häkchen geht der <b>unbearbeitete</b> Ton
         an Google. <b>Bitte nur mit Kopfhörern</b>, sonst hört das Mikrofon Mila selbst und sie unterbricht sich.
@@ -339,6 +345,15 @@ window.addEventListener("unhandledrejection", function(e){
     <label class="lb">Live-Modell</label>
     <input type="text" id="model" placeholder="gemini-3.8-live">
     <div class="foot">Muss ein <b>Live-/Realtime-Modell</b> sein (BidiGenerateContent). Normale Chat-Modelle funktionieren hier nicht. Namen ändern sich – im Zweifel in der Google-Doku nachsehen. Voreingestellt: <code id="mdef"></code></div>
+    <div class="foot" style="margin-top:8px">Schneller: Modell aus der Liste wählen, übernehmen, neu aufbauen.</div>
+    <select id="liveModelSel"></select>
+    <div class="row" style="margin-top:6px">
+      <button id="applyModel">Übernehmen &amp; neu starten</button>
+      <button id="refreshModels" class="ghost">Liste von Google holen</button>
+    </div>
+    <div class="foot" id="modelhint">Das Feld ist sofort gefüllt – auch ohne Internet. „Liste von Google holen" ergänzt,
+      welche Modelle dein Key wirklich darf. Nach dem Übernehmen einen ganzen Satz sprechen und vergleichen.</div>
+
 
     <div class="row">
       <div style="flex:1"><label class="lb">Stimme fürs Gespräch</label>
@@ -448,13 +463,6 @@ window.addEventListener("unhandledrejection", function(e){
     </div>
     <pre id="modelinfo"></pre>
 
-    <label class="lb" style="margin-top:10px">Gesprächsmodell ausprobieren</label>
-    <div class="foot" style="margin:0 0 6px">Wie gut du verstanden wirst, hängt auch am Modell – die Erkennung steckt im Gesprächsmodell selbst.
-      Hier kannst du durchschalten: antippen, Mila baut neu auf, einen Satz sprechen, vergleichen.</div>
-    <div class="row" style="flex-wrap:wrap;gap:6px" id="livePickRow">
-      <button id="loadLiveModels" class="ghost" style="flex:1 1 100%">Modelle laden &amp; durchschalten</button>
-    </div>
-
 
 
     </details>
@@ -520,7 +528,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.2";
+const VERSION = "v5.5";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -695,6 +703,11 @@ function onMicChunk(f32){
   if(sayBusy) return;                      // Handystimme laeuft – nicht sich selbst zuhoeren
   // Halbdialog: waehrend sie spricht, geht kein Mikro raus (Echo-Schutz)
   if(S.duplex === "half" && state === "speaking") return;
+  /* Ohne Androids Echounterdrückung (Häkchen „roher Ton“) hört das Mikrofon
+     Mila selbst – sie antwortet dann auf ihr eigenes Sprechen und unterbricht
+     sich dauernd. Solange sie redet (plus 400 ms Nachhall) geht deshalb nichts
+     raus – außer du hast Kopfhörer eingetragen. */
+  if(S.rawMic && !S.headphones && Date.now() - lastPlayAt < 400) return;
   /* Pegel anheben – bei leiser Sprache rät die Erkennung mehr.
      Weich begrenzt (tanh), damit laute Stellen nicht übersteuern. */
   const gain = Math.max(1, Number(S.micGain) || 1.8);
@@ -712,7 +725,7 @@ function onMicChunk(f32){
     sentChunks++; sentBytes += pcm.length;
   }catch(e){ /* Socket im Umbau – Chunk verwerfen, nicht die App */ }
 }
-let micBars = [], eqNodes = null, lastPeak = 0;
+let micBars = [], eqNodes = null, lastPeak = 0, lastPlayAt = 0;
 
 /* ---------- Mikrofon-Equalizer ---------- */
 const EQ_PRESETS = {
@@ -878,6 +891,7 @@ async function startAudio(){
     : { channelCount:1, echoCancellation:true,  noiseSuppression:true,  autoGainControl:true  };
   micStream = await navigator.mediaDevices.getUserMedia({ audio: tonBedingungen });
   if(roh) feed("", "Mikrofon-Verarbeitung aus – roher Ton geht an Google");
+  if(roh && !S.headphones) feed("w", "Echo-Schutz an: dein Mikrofon ist stumm, solange Mila spricht (kein Kopfhörer eingetragen)");
 
   /* 16 kHz ist das, was die Live-API erwartet. Wenn das Geraet das nicht kann,
      NICHT luegen: dann den echten Takt nehmen und mitschicken. */
@@ -938,7 +952,7 @@ function playPcm(base64){
   if(!playCtx) return;
   const u8 = b64decode(base64);
   const f32 = pcm16ToFloat(u8);
-  recvChunks++; recvBytes += u8.length; lastAudioAt = Date.now();
+  recvChunks++; recvBytes += u8.length; lastAudioAt = Date.now(); lastPlayAt = Date.now();
   const buf = playCtx.createBuffer(1, f32.length, 24000);
   buf.copyToChannel(f32, 0);
   const s = playCtx.createBufferSource();
@@ -1431,6 +1445,8 @@ function fillCfg(){
   $("silv").textContent = ((Number(S.sil) || 2200) / 1000).toFixed(1).replace(".", ",");
   if($("reasr")) $("reasr").checked = S.reASR === true;
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
+  if($("headphones")) $("headphones").checked = S.headphones === true;
+  try{ modelListeFuellen(); }catch(e){}
   if($("micgain")){ const g = Number(S.micGain) || 1.8; $("micgain").value = Math.round(g*100);
     if($("gainv")) $("gainv").textContent = g.toFixed(1).replace(".", ","); }
   $("duplex").value = S.duplex || "full";
@@ -1739,7 +1755,15 @@ if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e
 if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 if($("rawmic")) $("rawmic").addEventListener("change", e => {
   S.rawMic = e.target.checked; save();
-  toast(S.rawMic ? "Roher Mikrofon-Ton – wirkt beim nächsten Gesprächsstart" : "Handy-Verarbeitung wieder an", 6000);
+  toast(S.rawMic
+    ? (S.headphones ? "Roher Mikrofon-Ton – wirkt beim nächsten Gesprächsstart"
+                    : "Roher Ton an. Ohne Kopfhörer schaltet sich der Echo-Schutz ein (Mikro stumm, solange sie spricht).")
+    : "Handy-Verarbeitung wieder an", 8000);
+});
+if($("headphones")) $("headphones").addEventListener("change", e => {
+  S.headphones = e.target.checked; save();
+  toast(S.headphones ? "Kopfhörer eingetragen – du kannst sie jederzeit unterbrechen."
+                     : "Ohne Kopfhörer: Echo-Schutz an, solange sie spricht.", 7000);
 });
 
 /* =====================================================================
@@ -1955,53 +1979,62 @@ document.addEventListener("click", ev => {
 });
 
 /* =====================================================================
-   Gesprächsmodell umschalten.
-   Die Spracherkennung sitzt im Live-Modell selbst – ein anderes Modell kann
-   dich deutlich besser oder schlechter verstehen. Deshalb: auswählen, neu
-   aufbauen, einen Satz sprechen, vergleichen.
+   Gesprächsmodell wählen.
+   Die Erkennung steckt im Live-Modell – ein anderes Modell kann dich besser
+   oder schlechter verstehen. Die Liste ist sofort gefüllt (auch offline),
+   „Liste von Google holen“ ergänzt, was der Key wirklich darf.
    ===================================================================== */
-let liveModelle = [];
-async function loadLiveModels(){
-  const row = $("livePickRow");
-  if(row) row.innerHTML = "<span class='foot' style='margin:0'>Frage Google nach deinen Live-Modellen …</span>";
+function modelListeFuellen(extra){
+  const sel = $("liveModelSel");
+  if(!sel) return;
+  const alle = [];
+  const rein = m => { const k = String(m || "").replace(/^models\//, "").trim();
+    if(k && !alle.includes(k)) alle.push(k); };
+  rein(S.model); (extra || []).forEach(rein); LIVE_CANDIDATES.forEach(rein);
+  sel.innerHTML = "";
+  alle.forEach(m => {
+    const o = document.createElement("option");
+    o.value = m; o.textContent = m + (m === S.model ? "  ✓ aktuell" : "");
+    if(m === S.model) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+async function modelListeVomServer(){
+  const h = $("modelhint");
+  if(h) h.textContent = "Frage Google nach deinen Live-Modellen …";
   try{
     const d = await discover();
-    liveModelle = (d && d.live) || [];
-    if(!liveModelle.length){
-      if(row) row.innerHTML = "<span class='foot' style='margin:0'>Google hat keine Live-Modelle für diesen Key gemeldet.</span>";
+    const live = (d && d.live) || [];
+    if(!live.length){
+      if(h) h.innerHTML = "<b style='color:#ffd166'>Google hat kein Live-Modell gemeldet</b> – die Liste bleibt wie sie ist. " +
+        "Prüf den Key unter ⚙ ▸ Gemini.";
       return;
     }
+    modelListeFuellen(live);
+    if(h) h.innerHTML = "<b style='color:#41d6a3'>" + live.length + " Live-Modelle gefunden.</b> Eines wählen, „Übernehmen &amp; neu starten“, dann einen Satz sprechen.";
   }catch(e){
-    if(row) row.innerHTML = "<span class='foot' style='margin:0'>Modellliste nicht abrufbar: " + (e.message || e) + "</span>";
-    return;
+    if(h) h.innerHTML = "<b style='color:#ffd166'>Liste nicht abrufbar</b> (" + (e.message || e) + "). " +
+      "Du kannst trotzdem jedes Modell im Feld oben wählen und übernehmen.";
   }
-  if(!row) return;
-  row.innerHTML = "";
-  liveModelle.forEach(m => {
-    const b = document.createElement("button");
-    b.className = (m === S.model ? "" : "ghost");
-    b.style.flex = "1 1 47%";
-    b.textContent = m.replace(/^models\//, "") + (m === S.model ? " ✓" : "");
-    b.onclick = async () => {
-      if(m === S.model){ toast("Das Modell läuft schon.", 4000); return; }
-      S.model = m; save(); fillCfg();
-      loadLiveModels();
-      feed("", "Gesprächsmodell gewechselt: " + m);
-      toast("Modell: " + m + " – ich baue neu auf", 6000);
-      if(activeMode === "live"){
-        try{ await reconnect("Modellwechsel"); }catch(e){ toast("Neuaufbau: " + (e.message || e), 8000); }
-      }
-    };
-    row.appendChild(b);
-  });
-  const hin = document.createElement("div");
-  hin.className = "foot";
-  hin.style.cssText = "flex:1 1 100%;margin:6px 0 0";
-  hin.innerHTML = "Antippen = sofort umschalten. Danach <b>einen ganzen deutschen Satz</b> sprechen und vergleichen.";
-  row.appendChild(hin);
+}
+function modelUebernehmen(){
+  const sel = $("liveModelSel");
+  if(!sel || !sel.value){ toast("Erst ein Modell wählen.", 5000); return; }
+  const m = sel.value;
+  if(m === S.model){ toast("Dieses Modell läuft schon: " + m, 5000); return; }
+  S.model = m; save(); fillCfg(); modelListeFuellen();
+  feed("", "Gesprächsmodell gewechselt: " + m);
+  toast("Modell: " + m + " – ich baue neu auf", 6000);
+  if(activeMode === "live"){
+    reconnect("Modellwechsel").catch(e => toast("Neuaufbau: " + (e.message || e), 8000));
+  }else{
+    toast("Wirkt beim nächsten Gesprächsstart: " + m, 7000);
+  }
 }
 document.addEventListener("click", ev => {
-  if(ev.target && ev.target.id === "loadLiveModels") loadLiveModels();
+  const id = ev.target && ev.target.id;
+  if(id === "applyModel") modelUebernehmen();
+  if(id === "refreshModels") modelListeVomServer();
 });
 
 /* ---------- Registerkarten in den Einstellungen ---------- */
