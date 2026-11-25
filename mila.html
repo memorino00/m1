@@ -271,6 +271,10 @@ window.addEventListener("unhandledrejection", function(e){
 
       <div class="hr"></div>
 
+      <label class="lb">Dein Eingang – live</label>
+      <canvas id="eqscope" width="640" height="150" style="width:100%;height:150px;background:#0d0b1c;border:1px solid rgba(255,255,255,.12);border-radius:12px"></canvas>
+      <div class="foot" id="eqmeter">Mikrofon noch nicht offen – Reiter öffnen startet die Vorschau.</div>
+
       <label class="lb">Rumpeln weg (Tiefe Töne unter …): <span id="eqhpv">100</span> Hz</label>
       <input type="range" id="eqhp" min="40" max="300" step="10" value="100">
       <div class="foot">Hebt Brummen, Lüfter, Tischklopfen und Bauchreden raus. Bei tiefem Brummen höher stellen.</div>
@@ -343,7 +347,7 @@ window.addEventListener("unhandledrejection", function(e){
     </select>
 
     <label class="lb">Pause, bis sie antwortet: <span id="silv">1,2</span> s</label>
-    <input type="range" id="sil" min="600" max="4000" step="100" value="2200">
+    <input type="range" id="sil" min="600" max="4000" step="100" value="1200">
     <div class="foot">Kurz = zackig, aber sie fällt dir ins Wort. Lang = sie lässt dich denken, wirkt aber träger.
       Wenn du mitten im Satz Luft holst und sie sofort loslegt: hochdrehen.</div>
 
@@ -492,7 +496,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.8";
+const VERSION = "v4.9";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -517,7 +521,9 @@ const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nic
   + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten. "
   + "Wenn du ein Wort akustisch nicht sicher verstanden hast, frage kurz nach („Meintest du …?“ oder „Das habe ich nicht verstanden, nochmal bitte“) "
   + "statt dir ein Thema auszudenken. Erfinde niemals ein Wort, das ich nicht gesagt habe – lieber einmal nachfragen. "
-  + "Sprich langsamer als sonst und mache Pausen zwischen den Sätzen.";
+  + "Sprich langsamer als sonst und mache Pausen zwischen den Sätzen. "
+  + "Wichtig: Wenn ich anfange zu reden, während du noch sprichst, brich sofort ab und höre mir zu – "
+  + "das ist kein Unterbrechen, sondern ich rede weiter. Fang dann nicht von vorn an, sondern reagiere auf das, was ich zuletzt gesagt habe.";
 
 const LANG_TAIL = "\n\nErinnerung: Alles auf Deutsch – auch die Wiedergabe meiner Worte. Sprich jetzt Deutsch.";
 
@@ -532,7 +538,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:2200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
+  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 },
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
@@ -547,6 +553,9 @@ function load(){ try{ const r=localStorage.getItem(LS); if(r) S=Object.assign(S,
   if(typeof S.sil !== "number") S.sil = 2200;
   /* v4.1: alte, zu kurze Pause einmal anheben – sie fiel dem Nutzer ins Wort. */
   if(!S.silMigriert){ if(Number(S.sil) < 1800) S.sil = 2200; S.silMigriert = true; }
+  /* v4.9: 2,2 s waren zu träge – das Gespräch wurde zur Frage-Antwort-Runde.
+     Jetzt 1,2 s; wenn du weiterredest, bricht sie sofort ab (siehe Regel unten). */
+  if(!S.silMigriert2){ if(Number(S.sil) > 1600) S.sil = 1200; S.silMigriert2 = true; }
   if(!S.duplex) S.duplex = "full";
   if(!S.pttGrace) S.pttGrace = 1600;
   if(!S.sysRate)  S.sysRate = 1.0;
@@ -700,20 +709,26 @@ function buildEQ(src){
     const p3 = capCtx.createBiquadFilter(); p3.type = "peaking";  p3.frequency.value = 3000; p3.Q.value = 0.9; p3.gain.value = e.b3;
     const p4 = capCtx.createBiquadFilter(); p4.type = "highshelf"; p4.frequency.value = 6000; p4.gain.value = e.b4;
     src.connect(hp); hp.connect(p1); p1.connect(p2); p2.connect(p3); p3.connect(p4);
-    eqNodes = { hp, p1, p2, p3, p4 };
+    const an = capCtx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.75;
+    p4.connect(an);                       /* nur zum Anzeigen, geht nirgends ans Ohr */
+    eqNodes = { hp, p1, p2, p3, p4, an };
     return p4;
   }catch(err){ eqNodes = null; return src; }
 }
 function applyEQ(){
   const e = eqState();
-  if(!eqNodes) return;
-  try{
-    eqNodes.hp.frequency.value = e.hp;
-    eqNodes.p1.gain.value = e.b1;
-    eqNodes.p2.gain.value = e.b2;
-    eqNodes.p3.gain.value = e.b3;
-    eqNodes.p4.gain.value = e.b4;
-  }catch(err){}
+  const ziele = [];
+  if(eqNodes) ziele.push(eqNodes);
+  if(eqPrev && eqPrev.nodes) ziele.push(eqPrev.nodes);
+  ziele.forEach(n => {
+    try{
+      n.hp.frequency.value = e.hp;
+      n.p1.gain.value = e.b1;
+      n.p2.gain.value = e.b2;
+      n.p3.gain.value = e.b3;
+      n.p4.gain.value = e.b4;
+    }catch(err){}
+  });
 }
 function eqToUI(){
   const e = eqState();
@@ -825,6 +840,7 @@ async function uhRun(){
 }
 
 async function startAudio(){
+  try{ stopEQPreview(); }catch(e){}     /* nur EIN Mikrofon gleichzeitig */
   micStream = await navigator.mediaDevices.getUserMedia({
     audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true }
   });
@@ -879,6 +895,8 @@ function stopAudio(){
   try{ if(playCtx) playCtx.close(); }catch(e){}
   capCtx=capNode=aWorklet=playCtx=playGain=micStream=silentGain=null; sources=[]; queueEnd=0;
   micBars=[]; $("level").innerHTML=""; if(S.stats) updateInfo(); releaseWake();
+  /* Nach dem Gespräch darf die Anzeige wieder die Vorschau benutzen. */
+  setTimeout(() => { if($("micTab") && $("micTab").style.display !== "none") startEQPreview(); }, 600);
 }
 
 /* ---------- Audio raus ---------- */
@@ -1074,7 +1092,7 @@ function connect(){
     }
 
     if(msg.setupComplete){
-      if(!live) feed("ok", "Live-Sitzung steht – sie hört jetzt zu");
+      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); eqDrawStart(); }
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -1295,30 +1313,39 @@ function updateInfo(){
 let letzterAufbau = 0;
 async function reconnect(why){
   if(reconnecting || activeMode !== "live") return;
-  /* Nie schneller als 4 s nach dem letzten Aufbau verbinden – sonst kollidieren
-     zwei Sitzungen und Google antwortet „already connected“. */
-  const warte = Math.max(0, 4000 - (Date.now() - letzterAufbau));
-  if(warte > 0){
-    feed("w", "Neuer Aufbau in " + Math.round(warte/1000) + " s (alte Sitzung wird freigegeben)");
-    setTimeout(() => reconnect(why), warte);
-    return;
-  }
-  letzterAufbau = Date.now();
   reconnecting = true;
-  try{
-    toast("Verbindung wird neu aufgebaut" + (why ? " (" + why + ")" : "") + " …", 6000);
-    try{ if(ws && ws.readyState === 1) ws.close(1000, "reconnect"); }catch(e){}
-    ws = null; live = false; stopPlayback();
-    try{ stopAudio(); }catch(e){}
-    await new Promise(r => setTimeout(r, 600));
-    await connect();
-    setModePill("live");
-  }catch(e){
-    toast("Neuaufbau ging nicht: " + (e.message || e) + " – ich nehme Push-to-Talk.", 14000);
-    try{ disconnect(); }catch(_){}
-    setModePill(null);
-    try{ startPTT(); }catch(_){}
-  }finally{ reconnecting = false; }
+  toast("Verbindung wird neu aufgebaut" + (why ? " (" + why + ")" : "") + " …", 5000);
+  let letzterFehler = null;
+  /* Vier Versuche mit wachsender Pause. „already connected“ und Netzabbrüche
+     sind KEIN Grund, auf Push-to-Talk zurückzufallen – das hat dich mitten im
+     Gespräch rausgeworfen. Nur echte Ablehnungen (Key, Kontingent) brechen ab. */
+  for(let i = 1; i <= 4; i++){
+    try{
+      const warte = Math.max(1200, 3500 - (Date.now() - letzterAufbau));
+      feed("w", "Neuaufbau " + i + "/4 – alte Sitzung wird freigegeben (" + Math.round(warte/1000) + " s)");
+      await new Promise(r => setTimeout(r, warte));
+      try{ if(ws && ws.readyState === 1) ws.close(1000, "reconnect"); }catch(e){}
+      ws = null; live = false; stopPlayback();
+      try{ stopAudio(); }catch(e){}
+      await new Promise(r => setTimeout(r, 500));
+      letzterAufbau = Date.now();
+      await connect();
+      setModePill("live");
+      feed("ok", "Live-Sitzung wieder da (Versuch " + i + ")");
+      reconnecting = false;
+      return;
+    }catch(e){
+      letzterFehler = e;
+      const m = String((e && e.message) || "");
+      if(/Kontingent|quota|abgelehnt|permission|API key|nicht freigeschaltet/i.test(m)) break;
+    }
+  }
+  reconnecting = false;
+  feed("e", "Neuaufbau nach 4 Versuchen nicht möglich: " + String((letzterFehler && letzterFehler.message) || letzterFehler));
+  toast("Neuaufbau ging nicht: " + String((letzterFehler && letzterFehler.message) || letzterFehler) + " – ich nehme Push-to-Talk.", 14000);
+  try{ disconnect(); }catch(_){}
+  setModePill(null);
+  try{ startPTT(); }catch(_){}
 }
 setInterval(() => { if(live && S.stats) updateInfo(); }, 1000);
 
@@ -1675,6 +1702,124 @@ if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.c
 if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 
+/* =====================================================================
+   Eingangs-Anzeige: Spektrum-Kurve + Pegel.
+   Läuft ein Gespräch, wird der echte Mikrofon-Ton angezeigt. Sonst öffnet
+   die Vorschau ein eigenes Mikrofon – nur zum Anzeigen, ohne Senden.
+   ===================================================================== */
+let eqPrev = null, eqDrawId = null, eqClipZaehler = 0;
+
+function eqAnalyser(){
+  if(eqNodes && eqNodes.an) return eqNodes.an;
+  if(eqPrev && eqPrev.an) return eqPrev.an;
+  return null;
+}
+
+async function startEQPreview(){
+  if(eqAnalyser()) return;                        /* echtes Mikro läuft schon */
+  stopEQPreview();
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({ audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(st);
+    const e = eqState();
+    const mk = (type, freq, gain, q) => {
+      const f = ctx.createBiquadFilter(); f.type = type;
+      if(freq) f.frequency.value = freq;
+      if(gain !== undefined && gain !== null) f.gain.value = gain;
+      if(q) f.Q.value = q;
+      return f;
+    };
+    const hp = mk("highpass", e.hp, null, 0.7);
+    const p1 = mk("peaking", 250, e.b1, 0.9);
+    const p2 = mk("peaking", 1000, e.b2, 0.9);
+    const p3 = mk("peaking", 3000, e.b3, 0.9);
+    const p4 = mk("highshelf", 6000, e.b4);
+    const an = ctx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.75;
+    src.connect(hp); hp.connect(p1); p1.connect(p2); p2.connect(p3); p3.connect(p4); p4.connect(an);
+    eqPrev = { ctx, st, an, nodes:{ hp, p1, p2, p3, p4 } };
+    const m = $("eqmeter"); if(m) m.textContent = "Vorschau an – sprich mal. Die Kurve zeigt, was bei Google ankommt.";
+  }catch(err){
+    const m = $("eqmeter");
+    if(m) m.textContent = "Mikrofon nicht freigegeben (" + (err.message || err) + ") – Anzeige bleibt aus.";
+  }
+}
+function stopEQPreview(){
+  if(!eqPrev) return;
+  try{ eqPrev.st.getTracks().forEach(t => t.stop()); }catch(e){}
+  try{ eqPrev.ctx.close(); }catch(e){}
+  eqPrev = null;
+}
+function eqDrawStop(){ if(eqDrawId){ cancelAnimationFrame(eqDrawId); eqDrawId = null; } }
+function eqDraw(){
+  const cv = $("eqscope");
+  if(!cv || cv.offsetParent === null){ eqDrawId = null; return; }
+  const an = eqAnalyser();
+  const c = cv.getContext("2d");
+  const W = cv.width, H = cv.height, LW = Math.round(W * 0.76);
+  c.clearRect(0, 0, W, H);
+  c.fillStyle = "#0d0b1c"; c.fillRect(0, 0, W, H);
+
+  /* Frequenz-Gitter 100 Hz – 8 kHz (logarithmisch) */
+  c.strokeStyle = "rgba(255,255,255,.07)"; c.lineWidth = 1; c.font = "11px sans-serif"; c.fillStyle = "rgba(255,255,255,.35)";
+  [100, 300, 1000, 3000, 8000].forEach(f => {
+    const x = Math.round(Math.log10(f / 80) / Math.log10(8000 / 80) * LW);
+    c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H - 18); c.stroke();
+    c.fillText(f >= 1000 ? (f / 1000) + "k" : f, x + 3, H - 5);
+  });
+  c.strokeStyle = "rgba(255,255,255,.07)";
+  [0, 6, 12, 18].forEach(dy => { c.beginPath(); c.moveTo(0, dy * 6 + 4); c.lineTo(LW, dy * 6 + 4); c.stroke(); });
+
+  let peak = 0, rms = 0;
+  if(an){
+    const bins = an.frequencyBinCount;
+    const kurve = new Uint8Array(bins);
+    an.getByteFrequencyData(kurve);
+    const zeit = new Uint8Array(an.fftSize);
+    an.getByteTimeDomainData(zeit);
+    for(let i = 0; i < zeit.length; i++){ const v = (zeit[i] - 128) / 128; rms += v * v; if(Math.abs(v) > peak) peak = Math.abs(v); }
+    rms = Math.sqrt(rms / zeit.length);
+
+    const grad = c.createLinearGradient(0, H, 0, 0);
+    grad.addColorStop(0, "rgba(123,92,255,.15)");
+    grad.addColorStop(1, "rgba(180,76,255,.85)");
+    c.beginPath(); c.moveTo(0, H - 18);
+    for(let x = 0; x < LW; x++){
+      const f = 80 * Math.pow(8000 / 80, x / LW);
+      const idx = Math.min(bins - 1, Math.round(f / (an.context.sampleRate / 2) * bins));
+      const y = H - 18 - (kurve[idx] / 255) * (H - 26);
+      c.lineTo(x, y);
+    }
+    c.lineTo(LW, H - 18); c.closePath();
+    c.fillStyle = grad; c.fill();
+    c.strokeStyle = "rgba(210,140,255,.95)"; c.lineWidth = 1.5; c.stroke();
+  }
+
+  /* Pegel rechts */
+  const bx = LW + 10, bw = W - bx - 10, bh = H - 24;
+  c.fillStyle = "rgba(255,255,255,.08)"; c.fillRect(bx, 4, bw, bh);
+  const pv = Math.min(1, peak);
+  const hh = Math.round(bh * pv);
+  c.fillStyle = pv > 0.97 ? "#ff5470" : pv > 0.75 ? "#ffd166" : "#41d6a3";
+  c.fillRect(bx, 4 + bh - hh, bw, hh);
+  c.strokeStyle = "rgba(255,255,255,.35)";
+  [0.5, 0.75, 0.95].forEach(p => { const y = 4 + bh - bh * p; c.beginPath(); c.moveTo(bx, y); c.lineTo(bx + bw, y); c.stroke(); });
+
+  /* Text */
+  const db = peak > 0 ? Math.round(20 * Math.log10(peak)) : -99;
+  let urteil, farbe;
+  if(!an){ urteil = "kein Mikrofon"; farbe = "#9aa"; }
+  else if(peak > 0.97){ eqClipZaehler++; urteil = "übersteuert – Verstärkung runter"; farbe = "#ff5470"; }
+  else if(db < -32){ urteil = "zu leise – näher ans Mikro oder Verstärkung hoch"; farbe = "#ffd166"; }
+  else { eqClipZaehler = 0; urteil = "gut"; farbe = "#41d6a3"; }
+  if(eqClipZaehler > 30){ urteil = "dauerhaft übersteuert – Verstärkung deutlich runter"; }
+  const m = $("eqmeter");
+  if(m) m.innerHTML = "Pegel <b style='color:" + farbe + "'>" + (db <= -99 ? "–" : db + " dB") + "</b> · " + urteil;
+
+  eqDrawId = requestAnimationFrame(eqDraw);
+}
+function eqDrawStart(){ if(!eqDrawId) eqDrawId = requestAnimationFrame(eqDraw); }
+
 /* ---------- Registerkarten in den Einstellungen ---------- */
 function showSetTab(name){
   const allg = $("allgTab"), mic = $("micTab");
@@ -1683,6 +1828,13 @@ function showSetTab(name){
   mic.style.display = name === "mic" ? "" : "none";
   document.querySelectorAll("#setTabs .mtab").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   try{ localStorage.setItem(LS + "tab", name); }catch(e){}
+  if(name === "mic"){
+    eqDrawStart();
+    if(!live) startEQPreview();
+  }else{
+    eqDrawStop();
+    if(!live) stopEQPreview();
+  }
 }
 document.querySelectorAll("#setTabs .mtab").forEach(b => {
   b.addEventListener("click", () => showSetTab(b.dataset.tab));
