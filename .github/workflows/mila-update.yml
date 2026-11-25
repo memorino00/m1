@@ -1,0 +1,17 @@
+name: Mila aktualisieren
+on:
+  schedule: [{cron: "0 4 * * *"}]
+  workflow_dispatch:
+permissions: {contents: write}
+jobs:
+  holen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -sSL -o neu.html "https://drive.usercontent.google.com/download?id=1sOmzjRXoovX13bHaH09lnU0imEVHt057&export=download"
+          grep -q "</html>" neu.html && grep -q 'const VERSION' neu.html && [ $(wc -c < neu.html) -gt 50000 ]
+          mv neu.html mila.html
+          git config user.name Mila-Update
+          git config user.email actions@users.noreply.github.com
+          git diff --quiet -- mila.html || (git add mila.html && git commit -m "Neue Fassung aus Drive" && git push)
