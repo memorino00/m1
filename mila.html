@@ -280,12 +280,19 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="foot">Kurz = zackig, aber sie fällt dir ins Wort. Lang = sie lässt dich denken, wirkt aber träger.
       Wenn du mitten im Satz Luft holst und sie sofort loslegt: hochdrehen.</div>
 
+    <label class="lb">Mikrofon-Verstärkung: <span id="gainv">1,8</span>×</label>
+    <input type="range" id="micgain" min="100" max="400" step="10" value="180">
+    <div class="foot">Wenn sie Wörter verwechselt („super“ → „Zucker“), ist oft einfach zu wenig Pegel da.
+      Dreh das hoch, bis die Balken beim Reden fast oben anschlagen, aber nicht dauerhaft kleben.
+      Zu viel ist auch schlecht: dann übersteuert es und sie versteht noch weniger.</div>
+
     <label class="lb" style="display:flex;gap:8px;align-items:center;margin-top:10px">
-      <input type="checkbox" id="reasr" style="width:auto"> Mitschrift nachhören (2. Durchgang, genauer)
+      <input type="checkbox" id="reasr" style="width:auto"> Mitschrift nachhören (Versuch, meist schlechter)
     </label>
-    <div class="foot">Google schreibt kurze Wörter manchmal daneben („super“ → „Zucker“).
-      Dann schicke ich das Audio des Satzes nachträglich an ein reines Transkriptions-Modell und ersetze den Text.
-      Kostet ein Extra-Anfrage pro Satz – bei aufgebrauchtem Kontingent bleibt einfach die erste Mitschrift stehen.</div>
+    <div class="foot"><b>Standard aus – bitte aus lassen.</b> Im Test war der zweite Durchgang langsamer
+      und traf weniger als die normale Mitschrift. Steht hier aus gutem Grund auf „aus“.
+      Wer es trotzdem probieren will: Häkchen setzen, dann wird das Audio des Satzes
+      nachträglich an ein Transkriptions-Modell geschickt und ersetzt den Text.</div>
 
     <label class="lb">Darf sie dich hören, während sie selbst spricht?</label>
     <select id="duplex">
@@ -416,7 +423,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v4.4";
+const VERSION = "v4.6";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -438,7 +445,10 @@ function transLang(){ return /^[a-z]{2}-[A-Z]{2}$/.test((S && S.lang) || "") ? S
 
 const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nicht schnell herunterrasseln. "
   + "Warte, bis ich meinen Satz zu Ende gesprochen habe; falle mir nicht ins Wort und fang nicht an, während ich noch rede. "
-  + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten.";
+  + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten. "
+  + "Wenn du ein Wort akustisch nicht sicher verstanden hast, frage kurz nach („Meintest du …?“ oder „Das habe ich nicht verstanden, nochmal bitte“) "
+  + "statt dir ein Thema auszudenken. Erfinde niemals ein Wort, das ich nicht gesagt habe – lieber einmal nachfragen. "
+  + "Sprich langsamer als sonst und mache Pausen zwischen den Sätzen.";
 
 const LANG_TAIL = "\n\nErinnerung: Alles auf Deutsch – auch die Wiedergabe meiner Worte. Sprich jetzt Deutsch.";
 
@@ -453,7 +463,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:2200, duplex:"full", resum:"", stats:true, reASR:true,
+  sil:2200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -577,8 +587,16 @@ function onMicChunk(f32){
   if(sayBusy) return;                      // Handystimme laeuft – nicht sich selbst zuhoeren
   // Halbdialog: waehrend sie spricht, geht kein Mikro raus (Echo-Schutz)
   if(S.duplex === "half" && state === "speaking") return;
-  uhPush(f32);
-  const pcm = floatToPcm16(f32);
+  /* Pegel anheben – bei leiser Sprache rät die Erkennung mehr.
+     Weich begrenzt (tanh), damit laute Stellen nicht übersteuern. */
+  const gain = Math.max(1, Number(S.micGain) || 1.8);
+  let ton = f32;
+  if(gain !== 1){
+    ton = new Float32Array(f32.length);
+    for(let i=0;i<f32.length;i++) ton[i] = Math.tanh(f32[i] * gain);
+  }
+  uhPush(ton);
+  const pcm = floatToPcm16(ton);
   try{
     ws.send(JSON.stringify({
       realtimeInput: { audio: { data: b64encode(pcm), mimeType: "audio/pcm;rate=" + Math.round(capCtx.sampleRate) } }
@@ -636,7 +654,7 @@ function uhPlan(ziel){
 }
 async function uhRun(){
   if(!S.key) return;
-  const wav = uhWav(14);
+  const wav = uhWav(6);
   if(!wav) return;
   uhClear();
   const ziel = uhZiel; uhZiel = null;
@@ -1181,7 +1199,9 @@ function fillCfg(){
   if(S.ttsVoice) $("ttsvoice").value = S.ttsVoice;
   $("sil").value = Number(S.sil) || 2200;
   $("silv").textContent = ((Number(S.sil) || 2200) / 1000).toFixed(1).replace(".", ",");
-  if($("reasr")) $("reasr").checked = S.reASR !== false;
+  if($("reasr")) $("reasr").checked = S.reASR === true;
+  if($("micgain")){ const g = Number(S.micGain) || 1.8; $("micgain").value = Math.round(g*100);
+    if($("gainv")) $("gainv").textContent = g.toFixed(1).replace(".", ","); }
   $("duplex").value = S.duplex || "full";
   $("grace").value = Number(S.pttGrace) || 1600;
   $("gracev").textContent = ((Number(S.pttGrace) || 1600)/1000).toFixed(1).replace(".", ",");
@@ -1484,6 +1504,11 @@ $("sil").addEventListener("input", e => {
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
 if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
+if($("micgain")) $("micgain").addEventListener("input", e => {
+  S.micGain = Number(e.target.value) / 100;
+  if($("gainv")) $("gainv").textContent = S.micGain.toFixed(1).replace(".", ",");
+  save();
+});
 
 /* Kreis antippen = sie hoert sofort auf zu reden */
 $("halo").addEventListener("click", interruptHer);
