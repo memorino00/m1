@@ -408,7 +408,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v3.7";
+const VERSION = "v3.8";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -691,6 +691,20 @@ function interruptHer(){
   stopPlayback(); stopLocalSay(); setState(muted ? "muted" : "listening");
 }
 
+/* =====================================================================
+   Google schickt seine Antworten als BINÄR-Rahmen (ArrayBuffer), nicht als
+   Text. Weil ws.binaryType auf "arraybuffer" steht, kam jeder Rahmen als
+   ArrayBuffer an – JSON.parse scheiterte, wurde stillschweigend verworfen,
+   und Mila stand da wie „Google antwortet nicht". Genau das war es.
+   ===================================================================== */
+async function wsText(data){
+  if(typeof data === "string") return data;
+  if(data instanceof Blob) return await data.text();
+  if(data instanceof ArrayBuffer) return new TextDecoder("utf-8").decode(data);
+  if(ArrayBuffer.isView(data)) return new TextDecoder("utf-8").decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  return String(data);
+}
+
 /* ---------- Verbindung ---------- */
 function connect(){
   return new Promise(async (resolve, reject) => {
@@ -764,12 +778,19 @@ function connect(){
   };
 
   ws.onmessage = async ev => {
-    let txt = ev.data;
-    if(txt instanceof Blob) txt = await txt.text();
-    let msg; try{ msg = JSON.parse(txt); }catch(e){ return; }
+    const txt = await wsText(ev.data);
+    let msg; try{ msg = JSON.parse(txt); }
+    catch(e){
+      feed("w", "Antwort nicht lesbar: " + String(txt).slice(0, 60));
+      return;
+    }
+    window.__msgN = (window.__msgN || 0) + 1;
+    if(window.__msgN <= 8){
+      feed("", "Antwort " + window.__msgN + ": " + Object.keys(msg).slice(0, 4).join(", "));
+    }
 
     if(msg.setupComplete){
-      feed("ok", "Live-Sitzung steht – sie hört jetzt zu");
+      if(!live) feed("ok", "Live-Sitzung steht – sie hört jetzt zu");
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -1273,7 +1294,7 @@ async function liveSpeakTest(){
       }}));
     };
     sock.onmessage = async ev => {
-      let txt = ev.data; if(txt instanceof Blob) txt = await txt.text();
+      let txt = await wsText(ev.data);
       let m; try{ m = JSON.parse(txt); }catch(e){ return; }
       if(m.error){
         clearTimeout(guard);
@@ -2142,7 +2163,9 @@ async function startConversation(){
       + "Die Meldung bleibt stehen, bis du neu lädst – so kannst du den Grund in Ruhe nachlesen."
       + "<br><b>Tipp:</b> „Protokoll kopieren“ (unter dem Mikro-Knopf) und die Zeilen weitergeben – "
       + "da steht der Grund dann auch drin."
-      + "<div style='margin-top:10px'><button id='retryLive'>🔄 Nochmal als Live-Gespräch versuchen</button></div>";
+      + "<div style='margin-top:10px'><button id='retryLive'>🔄 Nochmal als Live-Gespräch versuchen</button></div>"
+      + "<div class='foot' style='margin-top:8px'>Kommt trotz offener Leitung keine Antwort: "
+      + "⚙ ▸ <b>Modelle prüfen</b> drücken – das fragt Google, welche Live-Modelle dein Key darf.</div>";
     b.style.display = "block";
     const rl = $("retryLive");
     if(rl) rl.onclick = async () => {
