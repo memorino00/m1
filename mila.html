@@ -528,7 +528,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.5";
+const VERSION = "v5.6";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -707,7 +707,7 @@ function onMicChunk(f32){
      Mila selbst – sie antwortet dann auf ihr eigenes Sprechen und unterbricht
      sich dauernd. Solange sie redet (plus 400 ms Nachhall) geht deshalb nichts
      raus – außer du hast Kopfhörer eingetragen. */
-  if(S.rawMic && !S.headphones && Date.now() - lastPlayAt < 400) return;
+  if(S.rawMic && !S.headphones && spieltGerade()) return;
   /* Pegel anheben – bei leiser Sprache rät die Erkennung mehr.
      Weich begrenzt (tanh), damit laute Stellen nicht übersteuern. */
   const gain = Math.max(1, Number(S.micGain) || 1.8);
@@ -726,6 +726,17 @@ function onMicChunk(f32){
   }catch(e){ /* Socket im Umbau – Chunk verwerfen, nicht die App */ }
 }
 let micBars = [], eqNodes = null, lastPeak = 0, lastPlayAt = 0;
+
+/* Redet sie GERADE aus dem Lautsprecher? Nicht „kam gerade ein Paket an“,
+   sondern „es ist noch Ton in der Warteschlange“ – sonst geht das Mikrofon
+   schon auf, während sie noch spricht, und sie hört sich selbst. */
+let lastQueueEnd = 0;
+function spieltGerade(){
+  const laeuft = !!(playCtx && queueEnd > playCtx.currentTime + 0.03);
+  const nachhall = Date.now() - lastPlayAt < 500;
+  return laeuft || nachhall;   /* NICHT zusätzlich auf state prüfen – der bleibt
+                                  manchmal hängen und das Mikro bliebe für immer aus */
+}
 
 /* ---------- Mikrofon-Equalizer ---------- */
 const EQ_PRESETS = {
@@ -959,6 +970,7 @@ function playPcm(base64){
   s.buffer = buf; s.connect(playGain);
   const t = Math.max(playCtx.currentTime + 0.02, queueEnd);
   s.start(t); queueEnd = t + buf.duration;
+  lastQueueEnd = queueEnd;
   sources.push(s);
   s.onended = () => { const i = sources.indexOf(s); if(i >= 0) sources.splice(i,1); };
   if(state !== "speaking") setState("speaking");
@@ -1993,8 +2005,11 @@ function modelListeFuellen(extra){
   rein(S.model); (extra || []).forEach(rein); LIVE_CANDIDATES.forEach(rein);
   sel.innerHTML = "";
   alle.forEach(m => {
+    const tot = modelLooksDead(m);
     const o = document.createElement("option");
-    o.value = m; o.textContent = m + (m === S.model ? "  ✓ aktuell" : "");
+    o.value = m;
+    o.textContent = m + (m === S.model ? "  ✓ aktuell" : "") + (tot ? "  (abgeschaltet)" : "");
+    if(tot) o.style.color = "#8a8aa0";
     if(m === S.model) o.selected = true;
     sel.appendChild(o);
   });
@@ -2021,6 +2036,10 @@ function modelUebernehmen(){
   const sel = $("liveModelSel");
   if(!sel || !sel.value){ toast("Erst ein Modell wählen.", 5000); return; }
   const m = sel.value;
+  if(modelLooksDead(m)){
+    toast("„" + m + "“ ist abgeschaltet – Google nimmt es nicht mehr. Nimm ein anderes.", 10000);
+    return;
+  }
   if(m === S.model){ toast("Dieses Modell läuft schon: " + m, 5000); return; }
   S.model = m; save(); fillCfg(); modelListeFuellen();
   feed("", "Gesprächsmodell gewechselt: " + m);
