@@ -64,6 +64,23 @@
 
   /* Text */
   .talklog{max-width:760px;margin:0 auto;padding:6px 16px 150px;display:flex;flex-direction:column;gap:8px}
+
+  /* Zwei Ansichten: Bühne (Animation) und Text. Wischen rechts/links wechselt. */
+  html.ansicht-buehne .talklog{display:none}
+  html.ansicht-buehne .stage{min-height:64vh}
+  html.ansicht-buehne .textkopf{display:none}
+  /* Auf der Bühne bleibt der Bildschirm ruhig: Protokoll und Selbsttest
+     sind in der Textansicht, nicht hier. */
+  html.ansicht-buehne #diag,html.ansicht-buehne #feed,html.ansicht-buehne #feedbar,
+  html.ansicht-buehne .microw{display:none!important}
+  html.ansicht-text .stage{display:none}
+  html.ansicht-text #diag,html.ansicht-text #feed,html.ansicht-text #feedbar,
+  html.ansicht-text .microw{display:none!important}
+  html.ansicht-buehne #log{display:none}
+  .wischhinweis{margin-top:14px;font-size:12px;color:var(--muted);text-align:center;letter-spacing:.3px}
+  .textkopf{max-width:760px;margin:0 auto;padding:10px 16px 0;display:flex;align-items:center;gap:8px}
+  .textkopf .wt{font-size:12px;color:var(--muted);flex:1}
+  #textToggle{width:auto;padding:0 10px;font-size:13px}
   .bubble{max-width:86%;padding:9px 13px;border-radius:14px;font-size:14.5px;white-space:pre-wrap;animation:in .18s ease}
   @keyframes in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .bubble.me{align-self:flex-end;background:linear-gradient(135deg,#6d4fe0,#8b6cf6);border-bottom-right-radius:4px}
@@ -165,6 +182,7 @@
   <div class="sub" id="hint">Gespräch in Echtzeit – sie hört zu, während du redest</div>
   <div class="grow"></div>
   <div id="mode" class="pill off">aus</div>
+  <button id="textToggle" class="ghost" title="Zwischen Animation und Text wechseln">Text</button>
   <button id="cfgBtn" title="Einstellungen">⚙</button>
 </header>
 
@@ -188,6 +206,7 @@
     <div class="stateText" id="state">Tippe auf „Gespräch starten"</div>
     <div class="level" id="level" style="justify-content:center"></div>
     <div class="linfo" id="linfo"></div>
+    <div class="wischhinweis" id="wishHint">nach rechts wischen → Text lesen</div>
   </div>
 </div>
 
@@ -205,6 +224,9 @@
   </div>
 </div>
 
+<div class="textkopf" id="textkopf">
+  <span class="wt">Verlauf – nach links wischen oder 📄 oben rechts</span>
+</div>
 <div class="talklog" id="log"></div>
 
 <div id="toast"></div>
@@ -528,7 +550,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.6";
+const VERSION = "v5.7";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -608,6 +630,27 @@ function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
 const logEl=$("log"), stateEl=$("state"), modeEl=$("mode"), talkBtn=$("talk"), toastEl=$("toast");
+
+/* Wischgesten: rechts = Text, links = Animation. Senkrechtes Scrollen bleibt unberührt. */
+(function wischSteuerung(){
+  let x0 = 0, y0 = 0, t0 = 0, aktiv = false;
+  const cfgOffen = () => { const c = $("cfg"); return c && c.classList.contains("open"); };
+  document.addEventListener("touchstart", ev => {
+    if(cfgOffen() || ev.touches.length !== 1) { aktiv = false; return; }
+    const t = ev.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); aktiv = true;
+  }, {passive:true});
+  document.addEventListener("touchend", ev => {
+    if(!aktiv) return;
+    aktiv = false;
+    const t = (ev.changedTouches && ev.changedTouches[0]) || null;
+    if(!t) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
+    if(dt > 900) return;                       /* kein Wisch, sondern Halten */
+    if(Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.8) return;
+    if(dx > 0 && !textAnsicht) zeigeText(true);
+    else if(dx < 0 && textAnsicht) zeigeText(false);
+  }, {passive:true});
+})();
 let state = "idle";
 
 function toast(m, ms=8000){ try{ feed("w", m); }catch(e){}
@@ -615,7 +658,10 @@ function toast(m, ms=8000){ try{ feed("w", m); }catch(e){}
   clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.style.display="none",ms); }
 function setState(s){
   state = s;
-  document.body.className = "state-" + s;
+  /* Nur den Zustand am <body> setzen. Die Ansicht (Bühne/Text) liegt am
+     <html>-Element, sonst würde sie hier bei jedem Zustandswechsel gelöscht. */
+  const alt = document.body.className.replace(/\bstate-\S+/g, "").trim();
+  document.body.className = (alt ? alt + " " : "") + "state-" + s;
   const map = {
     idle:'Tippe auf „Gespräch starten“',
     connecting:"verbinde …",
@@ -627,6 +673,27 @@ function setState(s){
   };
   stateEl.textContent = map[s] || s;
 }
+/* =====================================================================
+   Ansichten: Bühne (nur die Animation) und Text.
+   Standard im Gespräch: Bühne – der Bildschirm bleibt stehen, nichts
+   scrollt mit. Wer den Text lesen will: nach rechts wischen (oder 📄).
+   Zurück: nach links wischen.
+   ===================================================================== */
+let textAnsicht = false;
+function zeigeText(ja, still){
+  textAnsicht = !!ja;
+  const w = document.documentElement;
+  w.classList.toggle("ansicht-text", textAnsicht);
+  w.classList.toggle("ansicht-buehne", !textAnsicht);
+  const b = $("textToggle");
+  if(b){ b.textContent = textAnsicht ? "Kreis" : "Text"; b.title = textAnsicht ? "Zurück zur Animation" : "Text lesen"; }
+  if(textAnsicht){ try{ logEl.scrollTop = logEl.scrollHeight; window.scrollTo(0, 0); }catch(e){} }
+  else { try{ window.scrollTo(0, 0); }catch(e){} }
+  if(!still) toast(textAnsicht ? "Textansicht – nach links wischen bringt dich zurück" : "Animation – Bildschirm bleibt oben", 3500);
+}
+function textUmschalten(){ zeigeText(!textAnsicht); }
+try{ zeigeText(true, true); }catch(e){}   /* Start: Verlauf sichtbar */
+
 function bubble(text, who){
   if(!text) return null;
   const d=document.createElement("div");
@@ -1152,7 +1219,7 @@ function connect(){
     }
 
     if(msg.setupComplete){
-      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); eqDrawStart(); }
+      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); eqDrawStart(); zeigeText(false, true); }
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -2997,6 +3064,7 @@ function stopConversation(){
   talkBtn.textContent = "Gespräch starten";
   talkBtn.classList.remove("live");
   setState("idle");
+  try{ zeigeText(true, true); }catch(e){}
 }
 
 /* ================= Google Drive (nur lesend) ================= */
@@ -3133,7 +3201,7 @@ function feed(kind, text){
   line.innerHTML = "<b>" + t + "</b> " + String(text).replace(/</g,"&lt;").slice(0, 220);
   el.appendChild(line);
   while(el.children.length > 40) el.removeChild(el.firstChild);
-  el.scrollTop = el.scrollHeight;
+  if(textAnsicht || el.id !== "log") el.scrollTop = el.scrollHeight;
   try{ console.log("[Mila " + t + "] " + kind + " " + text); }catch(e){}
 }
 /* Was für ein Netz hat das Handy gerade? (Mobilfunk filtert schon mal wss://) */
@@ -3188,6 +3256,7 @@ function forceGerman(){
 }
 $("forceDe").onclick = forceGerman;
 $("cfgBtn").onclick = openCfg;
+if($("textToggle")) $("textToggle").onclick = textUmschalten;
 $("feedcopy").onclick = async () => {
   const t = $("feed").innerText;
   try{ await navigator.clipboard.writeText(t); toast("Protokoll kopiert – jetzt einfügen, wo du willst.", 4000); }
