@@ -66,6 +66,12 @@
   .talklog{max-width:760px;margin:0 auto;padding:6px 16px 150px;display:flex;flex-direction:column;gap:8px}
 
   /* Zwei Ansichten: Bühne (Animation) und Text. Wischen rechts/links wechselt. */
+  /* Protokoll-Ansicht: nur das Protokoll, groß und kopierbar */
+  html.ansicht-proto .stage,html.ansicht-proto .talklog,html.ansicht-proto .textkopf{display:none}
+  html.ansicht-proto #feed{display:block!important;max-height:none!important;margin:0 16px;border-radius:12px}
+  html.ansicht-proto #feedbar{display:flex!important;margin:8px 16px 0}
+  html.ansicht-proto .microw{display:none!important}
+  html.ansicht-proto #diag{display:none!important}
   html.ansicht-buehne .talklog{display:none}
   html.ansicht-buehne .stage{min-height:64vh}
   html.ansicht-buehne .textkopf{display:none}
@@ -78,6 +84,11 @@
   html.ansicht-text .microw{display:none!important}
   html.ansicht-buehne #log{display:none}
   .wischhinweis{margin-top:14px;font-size:12px;color:var(--muted);text-align:center;letter-spacing:.3px}
+  .letzte{margin:10px auto 0;max-width:900px;font-size:13.5px;color:#dcdcf0;text-align:center;
+    background:rgba(123,92,255,.10);border:1px solid rgba(123,92,255,.22);border-radius:12px;
+    padding:8px 12px;min-height:0;display:none}
+  .letzte b{color:#a99bff;font-weight:600;font-size:11px;letter-spacing:.4px;display:block;margin-bottom:2px}
+  .letzte.an{display:block}
   .textkopf{max-width:760px;margin:0 auto;padding:10px 16px 0;display:flex;align-items:center;gap:8px}
   .textkopf .wt{font-size:12px;color:var(--muted);flex:1}
   #textToggle{width:auto;padding:0 10px;font-size:13px}
@@ -206,7 +217,8 @@
     <div class="stateText" id="state">Tippe auf „Gespräch starten"</div>
     <div class="level" id="level" style="justify-content:center"></div>
     <div class="linfo" id="linfo"></div>
-    <div class="wischhinweis" id="wishHint">nach rechts wischen → Text lesen</div>
+    <div class="letzte" id="letzteZeile"><b>DU ZULETZT</b><span id="letzteText"></span></div>
+    <div class="wischhinweis" id="wishHint">nach links wischen → Text · nochmal → Protokoll</div>
   </div>
 </div>
 
@@ -225,7 +237,7 @@
 </div>
 
 <div class="textkopf" id="textkopf">
-  <span class="wt">Verlauf – nach links wischen oder 📄 oben rechts</span>
+  <span class="wt">Verlauf · nach links wischen: Protokoll · nach rechts: Animation</span>
 </div>
 <div class="talklog" id="log"></div>
 
@@ -272,6 +284,18 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="mtabs" id="setTabs">
       <button class="mtab on" data-tab="allg">Einstellungen</button>
       <button class="mtab" data-tab="mic">Mikrofon-Equalizer</button>
+      <button class="mtab" data-tab="proto">Protokoll</button>
+    </div>
+
+    <div id="protoTab" style="display:none">
+      <div class="foot" style="margin:0 0 10px">Alles, was beim Gespräch passiert ist – für die Fehlersuche.
+        <b>Kopieren</b> legt den ganzen Bericht in die Zwischenablage, dann hier einfügen und mir schicken.</div>
+      <div class="row">
+        <button id="protoCopy">Protokoll kopieren</button>
+        <button id="protoGo" class="ghost">Vollbild ansehen</button>
+        <button id="protoClear" class="ghost">Leeren</button>
+      </div>
+      <pre id="protoView" style="white-space:pre-wrap;font-size:11.5px;line-height:1.45;background:#0d0b1c;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;max-height:46vh;overflow:auto;margin-top:10px">(noch leer)</pre>
     </div>
 
     <div id="micTab" style="display:none">
@@ -419,6 +443,14 @@ window.addEventListener("unhandledrejection", function(e){
       Wer es trotzdem probieren will: Häkchen setzen, dann wird das Audio des Satzes
       nachträglich an ein Transkriptions-Modell geschickt und ersetzt den Text.</div>
 
+    <label class="lb">Namensmodus: sie antwortet nur, wenn du „Mila" sagst</label>
+    <select id="wakemode">
+      <option value="aus" selected>Aus – normales Gespräch (sie antwortet immer)</option>
+      <option value="an">An – sie hört zu, sagt aber nur etwas, wenn du „Mila" sagst</option>
+    </select>
+    <div class="foot">Im Namensmodus bleibt sie still, bis dein Name fällt. Sagen kannst du es auch:
+      „Mila, Namensmodus" bzw. „Mila, normales Gespräch".</div>
+
     <label class="lb">Darf sie dich hören, während sie selbst spricht?</label>
     <select id="duplex">
       <option value="full" selected>Ja – sie bricht ab, sobald du reinredest (echtes Gespräch)</option>
@@ -550,7 +582,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v5.7";
+const VERSION = "v5.8";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -569,6 +601,10 @@ const LANG_RULE = "SPRACHE – oberste Regel: Dieses Gespräch ist Deutsch (de-D
 /* Sprache für die Mitschrift – erst beim Sitzungsaufbau bestimmt, nicht beim Laden
    (sonst greift sie auf Einstellungen zu, die noch gar nicht gelesen sind). */
 function transLang(){ return /^[a-z]{2}-[A-Z]{2}$/.test((S && S.lang) || "") ? S.lang : "de-DE"; }
+
+const WAKE_RULE = "\n\nNAMENSMODUS ist AN: Ich spreche dich nur mit „Mila“ an. "
+  + "Antworte ausschließlich dann, wenn mein Name in dem gefallen ist, was ich gerade gesagt habe. "
+  + "Ohne meinen Namen bleibst du vollständig still – kein Ton, keine Bemerkung, keine Rückfrage.";
 
 const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nicht schnell herunterrasseln. "
   + "Warte, bis ich meinen Satz zu Ende gesprochen habe; falle mir nicht ins Wort und fang nicht an, während ich noch rede. "
@@ -593,7 +629,7 @@ let S = {
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
   sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8,
-  eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false,
+  eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
@@ -647,8 +683,8 @@ const logEl=$("log"), stateEl=$("state"), modeEl=$("mode"), talkBtn=$("talk"), t
     const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
     if(dt > 900) return;                       /* kein Wisch, sondern Halten */
     if(Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.8) return;
-    if(dx > 0 && !textAnsicht) zeigeText(true);
-    else if(dx < 0 && textAnsicht) zeigeText(false);
+    if(dx < 0) ansichtWeiter();      /* nach links wischen = nächste Ansicht */
+    else if(dx > 0) ansichtZurueck(); /* nach rechts zurück */
   }, {passive:true});
 })();
 let state = "idle";
@@ -679,19 +715,33 @@ function setState(s){
    scrollt mit. Wer den Text lesen will: nach rechts wischen (oder 📄).
    Zurück: nach links wischen.
    ===================================================================== */
-let textAnsicht = false;
-function zeigeText(ja, still){
-  textAnsicht = !!ja;
+/* Drei Ansichten: buehne (Animation) · text (Verlauf) · proto (Protokoll).
+   Wischen: nach LINKS eine Ansicht weiter, nach RECHTS eine zurück. */
+let ansicht = "buehne";
+let textAnsicht = false;           /* bleibt für die Scroll-Logik erhalten */
+function zeigeAnsicht(name, still){
+  if(!["buehne","text","proto"].includes(name)) name = "buehne";
+  ansicht = name;
+  textAnsicht = (name === "text");
   const w = document.documentElement;
-  w.classList.toggle("ansicht-text", textAnsicht);
-  w.classList.toggle("ansicht-buehne", !textAnsicht);
+  w.classList.toggle("ansicht-buehne", name === "buehne");
+  w.classList.toggle("ansicht-text",   name === "text");
+  w.classList.toggle("ansicht-proto",  name === "proto");
   const b = $("textToggle");
-  if(b){ b.textContent = textAnsicht ? "Kreis" : "Text"; b.title = textAnsicht ? "Zurück zur Animation" : "Text lesen"; }
-  if(textAnsicht){ try{ logEl.scrollTop = logEl.scrollHeight; window.scrollTo(0, 0); }catch(e){} }
-  else { try{ window.scrollTo(0, 0); }catch(e){} }
-  if(!still) toast(textAnsicht ? "Textansicht – nach links wischen bringt dich zurück" : "Animation – Bildschirm bleibt oben", 3500);
+  if(b){
+    b.textContent = name === "buehne" ? "Text" : name === "text" ? "Protokoll" : "Kreis";
+    b.title = "Weiter: " + (name === "buehne" ? "Verlauf" : name === "text" ? "Protokoll" : "Animation");
+  }
+  if(name === "text"){ try{ logEl.scrollTop = logEl.scrollHeight; }catch(e){} }
+  if(name === "proto"){ const f = $("feed"); if(f) f.scrollTop = f.scrollHeight; }
+  try{ window.scrollTo(0, 0); }catch(e){}
+  if(!still) toast(name === "buehne" ? "Animation" : name === "text" ? "Verlauf – nach links wischen: Protokoll" : "Protokoll – kopieren oder nach rechts zurück", 3000);
 }
-function textUmschalten(){ zeigeText(!textAnsicht); }
+function ansichtWeiter(){ zeigeAnsicht(ansicht === "buehne" ? "text" : ansicht === "text" ? "proto" : "buehne"); }
+function ansichtZurueck(){ zeigeAnsicht(ansicht === "proto" ? "text" : ansicht === "text" ? "buehne" : "buehne"); }
+function textUmschalten(){ ansichtWeiter(); }
+/* Alter Name bleibt funktionsfähig (wird an mehreren Stellen benutzt). */
+function zeigeText(ja, still){ zeigeAnsicht(ja ? "text" : "buehne", still); }
 try{ zeigeText(true, true); }catch(e){}   /* Start: Verlauf sichtbar */
 
 function bubble(text, who){
@@ -701,6 +751,15 @@ function bubble(text, who){
   const w=document.createElement("div"); w.className="who"; w.textContent = who==="me"?"Du":"Mila";
   const b=document.createElement("div"); b.textContent=text;
   d.appendChild(w); d.appendChild(b); logEl.appendChild(d);
+  if(who === "me"){
+    const lz = $("letzteZeile"), lt = $("letzteText");
+    if(lz && lt){
+      const txt = String(text || "").replace(/^🎤 …$/, "(unkenntlich)").slice(0, 160);
+      if(txt && txt !== "(unkenntlich)"){ lt.textContent = txt; lz.classList.add("an"); }
+    }
+  }
+  /* Im Text-Modus immer beim Aktuellen bleiben */
+  if(ansicht === "text"){ try{ logEl.scrollTop = logEl.scrollHeight; }catch(e){} }
   window.scrollTo(0, document.body.scrollHeight);
   return b;
 }
@@ -1170,7 +1229,7 @@ function connect(){
           voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } }
         }
       },
-      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + LANG_TAIL }] },
+      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + (S.wake ? WAKE_RULE : "") + LANG_TAIL }] },
       /* v4.3: Google riet die Sprache (leeres {} = automatisch erkennen) und schrieb
          dein Deutsch als Spanisch, Vietnamesisch oder Koreanisch mit. Mit einem
          BCP-47-Hinweis wird fest auf Deutsch erkannt – Eingang (Mitschrift) wie Ausgang. */
@@ -1281,6 +1340,17 @@ function connect(){
     if(sc.interrupted){ stopPlayback(); stopLocalSay(); setState("listening"); }
     if(sc.inputTranscription && sc.inputTranscription.text){
       const tr = sc.inputTranscription.text;
+      /* 1) Sprachbefehl? Dann ausführen – und die Runde gilt als erledigt. */
+      if(istBefehl(tr)){ rundeErlaubt = false; }
+      /* 2) Namensmodus: nur antworten, wenn „Mila“ gefallen ist. */
+      if(S.wake){
+        const gerufen = /\b(mila|milla|myla|mia|mile)\b/i.test(String(tr || ""));
+        rundeErlaubt = gerufen;
+        if(!gerufen){
+          try{ stopPlayback(); }catch(e){}
+          feed("", "Namensmodus: kein „Mila“ gehört – Antwort unterdrückt");
+        }
+      }
       if(transcriptUnklar(tr)){
         /* Google hat dein Deutsch als Spanisch/Vietnamesisch mitgeschrieben.
            Verstanden hat sie dich trotzdem – aber solchen Unsinn zeigen wir nicht. */
@@ -1298,7 +1368,10 @@ function connect(){
     }
     if(sc.modelTurn && sc.modelTurn.parts){
       for(const p of sc.modelTurn.parts){
-        if(p.inlineData && p.inlineData.data) playPcm(p.inlineData.data);
+        if(p.inlineData && p.inlineData.data){
+          if(S.wake && !rundeErlaubt) continue;        /* Namensmodus: still bleiben */
+          playPcm(p.inlineData.data);
+        }
         if(p.text){
           if(lastHer) lastHer.textContent += p.text; else lastHer = bubble(p.text,"her");
           if(textLive()) feedLiveText(p.text);   /* Handystimme uebernimmt das Vorlesen */
@@ -1306,6 +1379,7 @@ function connect(){
       }
     }
     if(sc.turnComplete){
+      rundeErlaubt = true;
       if(textLive()) flushLiveText();
       if(!sayBusy) setState(muted ? "muted" : "listening");
       lastMe = lastHer = null;
@@ -1524,6 +1598,7 @@ function fillCfg(){
   $("silv").textContent = ((Number(S.sil) || 2200) / 1000).toFixed(1).replace(".", ",");
   if($("reasr")) $("reasr").checked = S.reASR === true;
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
+  if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
   if($("headphones")) $("headphones").checked = S.headphones === true;
   try{ modelListeFuellen(); }catch(e){}
   if($("micgain")){ const g = Number(S.micGain) || 1.8; $("micgain").value = Math.round(g*100);
@@ -1829,6 +1904,7 @@ $("sil").addEventListener("input", e => {
   save();
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
+if($("wakemode")) $("wakemode").addEventListener("change", e => namensmodus(e.target.value === "an"));
 if($("reasr")) $("reasr").addEventListener("change", e => { S.reASR = e.target.checked; save(); });
 if($("micgain")) $("micgain").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
 if($("micgain2")) $("micgain2").addEventListener("input", e => setMicGain(Number(e.target.value) / 100));
@@ -2123,12 +2199,71 @@ document.addEventListener("click", ev => {
   if(id === "refreshModels") modelListeVomServer();
 });
 
+/* =====================================================================
+   Namensmodus: sie bleibt still, bis „Mila" fällt.
+   Erkannt wird das an Googles Mitschrift. Fällt der Name nicht, wird die
+   Antwort dieser Runde verworfen (Ton gestoppt) – so muss das Modell nicht
+   erst umprogrammiert werden.
+   ===================================================================== */
+let rundeErlaubt = true;
+function namensmodus(an){
+  S.wake = !!an; save();
+  if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
+  feed("", S.wake ? "Namensmodus AN – sie antwortet nur, wenn du „Mila“ sagst" : "Namensmodus aus – normales Gespräch");
+  toast(S.wake ? "Namensmodus an: erst „Mila“ sagen" : "Normales Gespräch", 5000);
+  if(activeMode === "live") reconnect("Namensmodus").catch(()=>{});   /* Systemtext neu senden */
+}
+
+/* ---------- Sprachbefehle ---------- */
+function lautstaerke(d){
+  try{
+    if(!playGain) return;
+    playGain.gain.value = Math.max(0.2, Math.min(2, (playGain.gain.value || 1) + d));
+    toast("Lautstärke " + Math.round(playGain.gain.value * 100) + " %", 2500);
+  }catch(e){}
+}
+const SPRACHBEFEHLE = [
+  { re: /\b(protokoll|bericht)\b/,                     tun: () => zeigeAnsicht("proto"),             sagt: "Protokoll geöffnet" },
+  { re: /\b(text\s*(anzeigen|lesen)|zeig\s*(mir\s*)?den\s*text|verlauf)\b/, tun: () => zeigeAnsicht("text"), sagt: "Verlauf geöffnet" },
+  { re: /\b(animation|kreis|zur(ü|ue)ck)\b/,          tun: () => zeigeAnsicht("buehne"),            sagt: "Animation" },
+  { re: /\b(gespr(ä|ae)ch\s*beenden|beenden|aufh(ö|oe)ren|stopp)\b/, tun: () => stopConversation(),  sagt: "Gespräch beendet" },
+  { re: /\b(namensmodus|namens\s*modus|auf\s*zuruf)\b/, tun: () => namensmodus(true),             sagt: "Namensmodus an" },
+  { re: /\b(normalmodus|normal\s*modus|freies\s*gespr(ä|ae)ch|immer\s*antworten)\b/, tun: () => namensmodus(false), sagt: "Normales Gespräch" },
+  { re: /\b(stumm|mikro\s*aus|pause)\b/,              tun: () => { try{ setMuted(!muted); }catch(e){} }, sagt: "Mikrofon umgeschaltet" },
+  { re: /\blauter\b/,                                  tun: () => lautstaerke(+0.15),                 sagt: "Lauter" },
+  { re: /\bleiser\b/,                                  tun: () => lautstaerke(-0.15),                 sagt: "Leiser" }
+];
+function istBefehl(text){
+  const t = String(text || "").toLowerCase().trim();
+  if(!t) return false;
+  const kurz = t.split(/\s+/).length <= 5;                    /* nur kurze Zurufe */
+  const mitName = /^(hey\s+)?mila\b/.test(t) || /\bmila\b/.test(t);
+  if(!kurz && !mitName) return false;
+  for(const b of SPRACHBEFEHLE){
+    if(b.re.test(t)){
+      try{ b.tun(); }catch(e){}
+      feed("ok", "Sprachbefehl: „" + t.slice(0, 40) + "“ → " + b.sagt);
+      toast(b.sagt, 3000);
+      try{ stopPlayback(); }catch(e){}     /* sie muss den Befehl nicht kommentieren */
+      return true;
+    }
+  }
+  return false;
+}
+
 /* ---------- Registerkarten in den Einstellungen ---------- */
 function showSetTab(name){
-  const allg = $("allgTab"), mic = $("micTab");
+  const allg = $("allgTab"), mic = $("micTab"), proto = $("protoTab");
   if(!allg || !mic) return;
-  allg.style.display = name === "mic" ? "none" : "";
+  allg.style.display = (name === "mic" || name === "proto") ? "none" : "";
   mic.style.display = name === "mic" ? "" : "none";
+  if(proto){
+    proto.style.display = name === "proto" ? "" : "none";
+    if(name === "proto"){
+      const v = $("protoView");
+      if(v){ const f = $("feed"); v.textContent = f && f.innerText.trim() ? f.innerText.trim() : "(noch leer)"; v.scrollTop = v.scrollHeight; }
+    }
+  }
   document.querySelectorAll("#setTabs .mtab").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   try{ localStorage.setItem(LS + "tab", name); }catch(e){}
   if(name === "mic"){
@@ -3257,6 +3392,21 @@ function forceGerman(){
 $("forceDe").onclick = forceGerman;
 $("cfgBtn").onclick = openCfg;
 if($("textToggle")) $("textToggle").onclick = textUmschalten;
+if($("protoCopy")) $("protoCopy").onclick = async () => {
+  const t = $("feed") ? $("feed").innerText : "";
+  try{ await navigator.clipboard.writeText(t); toast("Protokoll kopiert (" + t.length + " Zeichen).", 4000); }
+  catch(e){
+    const v = $("protoView"); if(v){ v.textContent = t; v.select && v.select(); }
+    toast("Kopieren ging nicht – Text steht im Kasten, dort markieren.", 8000);
+  }
+};
+if($("protoGo")) $("protoGo").onclick = () => { closeCfg(); zeigeAnsicht("proto"); };
+if($("protoClear")) $("protoClear").onclick = () => {
+  const f = $("feed"); if(f) f.innerHTML = "";
+  if($("protoView")) $("protoView").textContent = "(noch leer)";
+  toast("Protokoll geleert", 3000);
+};
+
 $("feedcopy").onclick = async () => {
   const t = $("feed").innerText;
   try{ await navigator.clipboard.writeText(t); toast("Protokoll kopiert – jetzt einfügen, wo du willst.", 4000); }
