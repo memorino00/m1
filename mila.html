@@ -522,6 +522,16 @@ window.addEventListener("unhandledrejection", function(e){
 
     </details>
 
+    <details class="grp" open><summary>Verbindung · wenn sie abreißt</summary>
+    <label class="lb">Nach einem Abbruch</label>
+    <select id="reconn">
+      <option value="schnell" selected>Schnell zurück – neue Sitzung, dafür in Sekunden wieder da (empfohlen)</option>
+      <option value="fortsetzen">Faden halten – versucht erst, das Gespräch fortzusetzen (dauert meist 30–100 s)</option>
+    </select>
+    <div class="foot">Bei einem Netzabbruch gibt Google die alte Sitzung minutenlang nicht frei. „Schnell zurück" versucht
+      einmal kurz das Fortsetzen und startet dann sofort neu – sie ist in wenigen Sekunden wieder da, weiß aber nichts
+      mehr vom Gespräch davor. „Faden halten" wartet länger und behält den Zusammenhang, wenn es klappt.</div>
+
     <details class="grp" open><summary>Wer spricht? · Gemini oder Handy-Stimme</summary>
     <label class="lb">Stimme (neuronales TTS – das ist der Unterschied zu „Roboter aus den 90ern")</label>
     <input type="text" id="ttsmodel" placeholder="gemini-3.8-flash-tts">
@@ -660,7 +670,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.6";
+const VERSION = "v6.7";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -737,7 +747,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[], laenge:"auto",
+  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[], laenge:"auto", reconn:"schnell",
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
@@ -1729,11 +1739,16 @@ async function reconnect(why){
      prallt jeder Versuch mit „already connected“ ab – genau das ist dir passiert.
      Jetzt: echte Wartezeiten 2, 6, 12, 20, 30, 45 s (zusammen gut zwei Minuten).
      Nur echte Ablehnungen (Key, Kontingent) brechen sofort ab. */
-  const wartezeiten = [2000, 6000, 12000, 20000, 30000, 45000];
-  for(let i = 1; i <= wartezeiten.length; i++){
-    const warte = wartezeiten[i - 1];
+  /* „schnell": 2 s mit Handle, dann alle 6 s warten Frischstart – Rückkehr in ~8 s.
+     „fortsetzen": lange Leiter mit Handle, damit der Gesprächsfaden bleibt. */
+  const plan = (S.reconn === "fortsetzen")
+    ? [ {w:2000,f:false}, {w:6000,f:false}, {w:12000,f:false}, {w:20000,f:false}, {w:30000,f:false}, {w:45000,f:false} ]
+    : [ {w:2000,f:false}, {w:4000,f:true},  {w:6000,f:true},  {w:12000,f:true}, {w:20000,f:true}, {w:30000,f:true} ];
+  const wartezeiten = plan.map(x => x.w);
+  for(let i = 1; i <= plan.length; i++){
+    const warte = plan[i - 1].w;
     try{
-      const frisch = i >= 3;   /* ab Versuch 3 ohne alte Sitzung */
+      const frisch = plan[i - 1].f;   /* neue Sitzung statt Fortsetzen? */
       feed("w", "Neuaufbau " + i + "/" + wartezeiten.length + " – warte " + Math.round(warte/1000)
         + " s" + (frisch ? " und nehme dann eine neue Sitzung" : " bis Google die alte Sitzung freigibt"));
       const b = $("retryBar");
@@ -1823,6 +1838,7 @@ function fillCfg(){
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
   if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
   if($("laenge")) $("laenge").value = S.laenge || "auto";
+  if($("reconn")) $("reconn").value = S.reconn || "schnell";
   try{ wakeUi(); }catch(e){}
   if($("headphones")) $("headphones").checked = S.headphones === true;
   try{ modelListeFuellen(); }catch(e){}
@@ -1840,6 +1856,7 @@ function applyCfg(){
   S.voice=$("voice").value; S.lang=$("lang").value.trim() || "de-DE";
   S.briefing=$("briefing").value.trim() || DEFAULT_BRIEFING;
   if($("laenge")) S.laenge = $("laenge").value || "auto";
+  if($("reconn")) S.reconn = $("reconn").value || "schnell";
   S.vad=$("vad").value;
   S.ttsModel=$("ttsmodel").value.trim() || TTS_CANDIDATES[0];
   S.ttsVoice=$("ttsvoice").value || "Kore";
