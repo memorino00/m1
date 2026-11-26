@@ -1981,6 +1981,7 @@ $("pload").addEventListener("click", async () => { try{ await piperLoad(S.pVoice
 $("driveconnect").addEventListener("click", () => { driveConnect(); });
 $("drivedisconnect").addEventListener("click", () => {
   driveToken = null; driveTokenUntil = 0;
+  driveTokenMerken();
   drvStat("Getrennt. Der Ordner bleibt gemerkt, das Wissen auch.");
   feed("w", "Drive getrennt");
 });
@@ -3790,6 +3791,31 @@ function stopConversation(){
 
 /* ================= Google Drive (nur lesend) ================= */
 let gisPromise = null, driveToken = null, driveTokenUntil = 0;
+/* Die Google-Anmeldung gilt etwa eine Stunde. Damit sie ein Neuladen der Seite
+   übersteht, liegt sie zusätzlich im Sitzungsspeicher (nur dieser Tab, nichts auf einem Server). */
+const DRIVE_SS = LS + "drive";
+function driveTokenMerken(){
+  try{
+    if(driveToken && driveTokenUntil > Date.now()){
+      sessionStorage.setItem(DRIVE_SS, JSON.stringify({t: driveToken, bis: driveTokenUntil}));
+    }else{
+      sessionStorage.removeItem(DRIVE_SS);
+    }
+  }catch(e){}
+}
+function driveTokenZurueck(){
+  try{
+    const r = sessionStorage.getItem(DRIVE_SS);
+    if(!r) return false;
+    const j = JSON.parse(r);
+    if(j && j.t && j.bis && Date.now() < j.bis - 60000){
+      driveToken = j.t; driveTokenUntil = j.bis;
+      return true;
+    }
+    sessionStorage.removeItem(DRIVE_SS);
+  }catch(e){}
+  return false;
+}
 function loadGis(){
   if(gisPromise) return gisPromise;
   gisPromise = new Promise((res, rej) => {
@@ -3805,6 +3831,15 @@ function loadGis(){
 }
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 function drvStat(html, cls){ const e = $("drivestat"); if(e){ e.className = "foot " + (cls||""); e.innerHTML = html; } }
+/* Beim Start: war die Anmeldung noch gültig, ist sie sofort wieder da – ohne Klick. */
+(function driveAnmeldungZurueck(){
+  if(!driveTokenZurueck()) return;
+  try{
+    if($("drivestat")) drvStat("Anmeldung noch gültig – verbunden"
+      + (S.driveFolderName ? " · Ordner <b>" + S.driveFolderName + "</b>" : " · noch kein Ordner gemerkt")
+      + (driveTokenUntil ? " · gilt bis " + new Date(driveTokenUntil).toLocaleTimeString("de-DE", {hour12:false}) : ""), "ok");
+  }catch(e){}
+})();
 
 async function driveConnect(){
   const cid = ($("driveclient").value || S.driveClientId || MILA_CLIENT_ID).trim();
@@ -3823,6 +3858,7 @@ async function driveConnect(){
         if(resp.error){ drvStat("<b>Anmeldung abgebrochen:</b> " + resp.error, "bad"); feed("e", "Drive: " + resp.error); return; }
         driveToken = resp.access_token;
         driveTokenUntil = Date.now() + ((resp.expires_in || 3600) * 1000);
+        driveTokenMerken();
         drvStat("Verbunden. Lade Ordner …", "ok");
         feed("ok", "Drive verbunden");
         await driveListFolders();
