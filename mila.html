@@ -660,7 +660,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.5";
+const VERSION = "v6.6";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -1306,13 +1306,14 @@ function transcriptUnklar(t){
 }
 
 /* ---------- Verbindung ---------- */
-function connect(){
+function connect(frisch){
   return new Promise(async (resolve, reject) => {
   if(!S.key){ openCfg(); reject(new Error("Kein Key")); return; }
   /* Jeder Aufbau bekommt eine Nummer. Timer eines abgebrochenen Versuchs dürfen
      NICHT in die neue Leitung hineinfeuern – genau das hat den Neuaufbau zerlegt. */
   const meineGen = ++aufbauGen;
   clearTimeout(zeitTimer);
+  if(frisch){ S.resum = ""; save(); }   /* neue Sitzung: altes Handle nicht wiederverwenden */
   setState("connecting"); talkBtn.disabled = true;
   try{
     await startAudio();
@@ -1359,7 +1360,9 @@ function connect(){
       /* Ohne das reisst die Sitzung nach wenigen Minuten ab – genau der Punkt,
          an dem ein "Gespräch" bisher kein Gespräch war. */
       contextWindowCompression: { slidingWindow: {} },
-      sessionResumption: S.resum ? { handle: S.resum } : {}
+      /* Mit Handle wird die alte Sitzung fortgesetzt. Hängt Google noch an ihr
+         („already connected"), hilft nur eine FRISCHE Sitzung ohne Handle. */
+      sessionResumption: (S.resum && !frisch) ? { handle: S.resum } : {}
     };
     const silence = Math.max(600, Math.min(4000, Number(S.sil) || 2200));
     if(S.vad === "auto" && !window.__vadRetry){
@@ -1409,7 +1412,7 @@ function connect(){
       lastAudioAt = Date.now();
       requestWake();
       if(S.stats) updateInfo();
-      resolve("live");
+      okFertig("live");
       return;
     }
     /* Sitzungs-Token: damit kann nach einem Abbruch nahtlos weitergehen. */
@@ -1451,7 +1454,7 @@ function connect(){
         try{ if(ws && ws.readyState === 1) ws.close(1000, "quota"); }catch(e){}
         ws = null; live = false;
         try{ stopAudio(); }catch(e){}
-        reject(new Error(quotaText()));
+        clearTimeout(zeitTimer); reject(new Error(quotaText()));
         return;
       }
       if(/already connected/i.test(roh)){
@@ -1535,7 +1538,7 @@ function connect(){
   };
 
   ws.onerror = () => {
-    if(!live) reject(new Error("WebSocket-Fehler (Key, Modellname oder Live nicht freigeschaltet)"));
+    if(!live){ clearTimeout(zeitTimer); reject(new Error("WebSocket-Fehler (Key, Modellname oder Live nicht freigeschaltet)")); }
   };
   ws.onclose = e => {
     const code = e.code || 0, reason = e.reason ? (" · " + e.reason) : "";
@@ -1550,7 +1553,7 @@ function connect(){
         /* Wir waren noch beim Aufbau: den Versuch sauber beenden – der Aufrufer
            versucht es nach einer Wartezeit erneut (siehe Aufbau-Schleife). */
         feed("w", "Google hält die alte Sitzung noch – neuer Versuch gleich");
-        reject(new Error("already connected – alte Sitzung noch offen"));
+        fehlerFertig(new Error("already connected – alte Sitzung noch offen"));
         return;
       }
       feed("w", "Google hält die alte Sitzung noch – ich warte 4 s und baue neu auf");
@@ -1562,7 +1565,7 @@ function connect(){
     }
     if(!had){
       feed("e", "Verbindung zu (" + code + reason + ") – " + closeHint(code, reason));
-      reject(new Error(closeHint(code, reason)));
+      fehlerFertig(new Error(closeHint(code, reason)));
       return;
     }
     if(activeMode === "live" && !stopping){
@@ -1573,6 +1576,8 @@ function connect(){
     }
   };
   const WARTE = 15000;
+  const fertig = (fn) => (wert) => { clearTimeout(zeitTimer); zeitTimer = null; fn(wert); };
+  const okFertig = fertig(resolve), fehlerFertig = fertig(reject);
   const zeitLimit = (versuch) => { zeitTimer = setTimeout(() => {
     if(meineGen !== aufbauGen) return;      /* alter Versuch – verwerfen */
     if(live) return;
@@ -1674,9 +1679,11 @@ function liveFehlschlag(txt){
 function liveWiederDa(){
   const b = $("retryBar");
   if(b) b.style.display = "none";
+  window.__skipWarte = null;
   letzteAntwort = Date.now();
 }
 if($("retryBar")) $("retryBar").addEventListener("click", async () => {
+  if(typeof window.__skipWarte === "function"){ window.__skipWarte(); return; }
   const b = $("retryBar");
   if(b) b.innerHTML = "verbinde …";
   try{
@@ -1726,17 +1733,26 @@ async function reconnect(why){
   for(let i = 1; i <= wartezeiten.length; i++){
     const warte = wartezeiten[i - 1];
     try{
+      const frisch = i >= 3;   /* ab Versuch 3 ohne alte Sitzung */
       feed("w", "Neuaufbau " + i + "/" + wartezeiten.length + " – warte " + Math.round(warte/1000)
-        + " s, bis Google die alte Sitzung freigibt");
-      await new Promise(r => setTimeout(r, warte));
+        + " s" + (frisch ? " und nehme dann eine neue Sitzung" : " bis Google die alte Sitzung freigibt"));
+      const b = $("retryBar");
+      if(b){
+        b.style.display = "block";
+        b.innerHTML = "Verbindung weg – ich warte " + Math.round(warte/1000) + " s (Versuch "
+          + i + "/" + wartezeiten.length + ") · <u>antippen = sofort</u>";
+      }
+      await new Promise(r => { const t = setTimeout(r, warte); window.__skipWarte = () => { clearTimeout(t); r(); }; });
+      window.__skipWarte = null;
       try{ if(ws && ws.readyState === 1) ws.close(1000, "reconnect"); }catch(e){}
       ws = null; live = false; stopPlayback();
       try{ stopAudio(); }catch(e){}
       await new Promise(r => setTimeout(r, 400));
       letzterAufbau = Date.now();
-      await connect();
+      await connect(frisch);
       setModePill("live");
-      feed("ok", "Live-Sitzung wieder da (Versuch " + i + ") – du kannst weiterreden");
+      feed("ok", "Live-Sitzung wieder da (Versuch " + i + (frisch ? ", neue Sitzung" : "") + ") – du kannst weiterreden");
+      if(frisch) toast("Neue Sitzung – was vorher gesagt wurde, weiß sie nicht mehr.", 6000);
       toast("Verbindung ist wieder da.", 4000);
       reconnecting = false;
       if(typeof liveWiederDa === "function") liveWiederDa();
