@@ -578,6 +578,10 @@ window.addEventListener("unhandledrejection", function(e){
         <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib das ins Gedächtnis"</td><td>legt es in Drive ab (Text davor oder danach zählt)</td></tr>
         <tr><td style="padding:5px 0;color:#e7c66b">„Mila, schreib ins Gedächtnis: …"</td><td>alles nach dem Doppelpunkt wird die Notiz</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, lies 00_Home.md"</td><td>genau diese Datei in den Kopf holen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib in 10_Wissen/Thema.md: …"</td><td>hängt an die Datei an, legt Ordner bei Bedarf an</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, archivier das Gespräch"</td><td>Zusammenfassung nach 20_Chats/ mit Frontmatter</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Aufgabe: …"</td><td>legt sie in 50_Tasks/Tasks.md ab</td></tr>
       </table>
       <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
         <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
@@ -642,6 +646,27 @@ window.addEventListener("unhandledrejection", function(e){
       </div>
       <div class="foot" id="drivememstat"></div>
 
+      <label class="lb">Werkzeuge · Pfad im Ordner SecondBrain</label>
+      <div class="row">
+        <input type="text" id="wzpfad" placeholder="00_Home.md oder 20_Chats/…md" style="flex:1" autocomplete="off" spellcheck="false">
+        <button id="wzlies" class="ghost">Lesen</button>
+      </div>
+      <label class="lb">Text für „Ergänzen“ / neue Datei</label>
+      <textarea id="wztext" rows="3" placeholder="Was soll in die Datei?" style="width:100%"></textarea>
+      <div class="row">
+        <button id="wzschreib" class="ghost" style="flex:1">An diesen Pfad ergänzen</button>
+      </div>
+      <div class="row">
+        <button id="wzarchiv" style="flex:1">Gespräch archivieren (20_Chats)</button>
+      </div>
+      <label class="lb"><input type="checkbox" id="archivauto" style="width:auto;margin-right:6px">Beim Beenden automatisch archivieren</label>
+      <label class="lb">Aufgabe ablegen</label>
+      <div class="row">
+        <input type="text" id="wzaufgabe" placeholder="Was ist zu tun?" style="flex:1">
+        <button id="wzaufgabebtn" class="ghost">In 50_Tasks</button>
+      </div>
+      <div class="foot" id="wzstat"></div>
+
       <div class="foot"><b>Client-ID besorgen (einmal, am besten am Rechner):</b>
         console.cloud.google.com → Projekt wählen → <i>APIs &amp; Services</i> → <i>Library</i> → „Google Drive API" aktivieren →
         <i>OAuth consent screen</i> (Extern, Testnutzer: die Mila-Adresse) → <i>Credentials</i> → <i>Create credentials</i> →
@@ -684,7 +709,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.9.2";
+const VERSION = "v7.0";
 /* Die eigene Google-Client-ID (Projekt „Mila“). Öffentlich, kein Geheimnis. */
 const MILA_CLIENT_ID = "854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com";
 let modelFixed = false;
@@ -768,7 +793,7 @@ let S = {
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:MILA_CLIENT_ID,
-  driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
+  driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true, archivAuto:false
 };
 const BAD_MODEL = /2\.5|3\.1-flash-live|preview-tts/i;
 function modelLooksDead(m){ return !m || BAD_MODEL.test(String(m)); }
@@ -1839,6 +1864,7 @@ document.addEventListener("keydown", e => {
 function openCfg(){
   fillCfg(); updateVoiceUI();
   if(window.speechSynthesis) sysScanVoices(0);
+  if($("archivauto")) $("archivauto").checked = !!S.archivAuto;
   const dc = $("driveclient");
   if(dc){ dc.value = S.driveClientId || MILA_CLIENT_ID; }
   if(!S.driveClientId) S.driveClientId = MILA_CLIENT_ID;
@@ -1966,6 +1992,22 @@ $("drivesave").addEventListener("click", () => {
   drvStat(S.driveFolderId ? "Gemerkt: <b>" + S.driveFolderName + "</b>. Jetzt „Wissen einlesen“ tippen." : "Kein Ordner gewählt.", S.driveFolderId ? "ok" : "");
 });
 $("drivelearn").addEventListener("click", () => { driveLearn(); });
+if($("wzlies")) $("wzlies").addEventListener("click", () => {
+  const e = $("wzpfad"); if(e && e.value.trim()) werkzeugLies(e.value.trim());
+  else wzStat("<b>Erst einen Pfad eintragen, z. B. 00_Home.md</b>", "bad");
+});
+if($("wzschreib")) $("wzschreib").addEventListener("click", () => {
+  const p = $("wzpfad"), t = $("wztext");
+  if(!p || !p.value.trim()){ wzStat("<b>Erst einen Pfad eintragen.</b>", "bad"); return; }
+  werkzeugSchreib(p.value.trim(), t ? t.value : "").then(ok => { if(ok && t) t.value = ""; });
+});
+if($("wzarchiv")) $("wzarchiv").addEventListener("click", () => { archivGespräch(); });
+if($("wzaufgabebtn")) $("wzaufgabebtn").addEventListener("click", () => {
+  const e = $("wzaufgabe");
+  if(e && e.value.trim()) aufgabeAblegen(e.value).then(ok => { if(ok) e.value = ""; });
+  else wzStat("<b>Erst eine Aufgabe eintragen.</b>", "bad");
+});
+if($("archivauto")) $("archivauto").addEventListener("change", ev => { S.archivAuto = !!ev.target.checked; save(); });
 if($("drivemem")) $("drivemem").addEventListener("click", () => {
   const el = $("drivenote");
   driveWrite(el ? el.value : "").then(ok => { if(ok && el) el.value = ""; });
@@ -2735,6 +2777,14 @@ const SPRACHBEFEHLE = [
   { re: /\b(stumm|mikro\s*aus|pause)\b/,              tun: () => { try{ setMuted(!muted); }catch(e){} }, sagt: "Mikrofon umgeschaltet" },
   { re: /\b(schreib|schreibe|notier|notiere|merk|merke|speicher)\w*\b.{0,45}\b(ged(ä|ae)chtnis|gehirn|second\s*brain)\b/,
                                                         tun: (satz) => { driveWrite(driveNoteAusBefehl(satz)); }, sagt: "Ins Gedächtnis geschrieben" },
+  { re: /(?:^|[\s,.])(lies|lese|öffne|oeffne|hol)\b.{0,30}?[\w\-./äöüß]+\.(md|markdown|txt)\b/,
+                                                        tun: (satz) => { const m = satz.match(/([\w\-./äöüß]+\.(?:md|markdown|txt))/i); if(m) werkzeugLies(m[1]); }, sagt: "Datei wird gelesen" },
+  { re: /\bschreib\w*\s+(in|nach)\s+[\w\-./äöüß]+\.(md|markdown|txt)\b/,
+                                                        tun: (satz) => { const m = satz.match(/\bschreib\w*\s+(?:in|nach)\s+([\w\-./äöüß]+\.(?:md|markdown|txt))\s*[:,]?\s*([\s\S]*)$/i); if(m && m[2].trim()) werkzeugSchreib(m[1], m[2]); }, sagt: "Wird in die Datei geschrieben" },
+  { re: /\b(archivier\w*|sichere)\b.{0,25}\b(gespr(ä|ae)ch|chat|verlauf)\b/,
+                                                        tun: () => { archivGespräch(); }, sagt: "Gespräch wird archiviert" },
+  { re: /\baufgabe\b\s*[:,]/,
+                                                        tun: (satz) => { const m = satz.match(/\baufgabe\b\s*[:,]\s*([\s\S]+)$/i); if(m) aufgabeAblegen(m[1]); }, sagt: "Aufgabe abgelegt" },
   { re: /\blauter\b/,                                  tun: () => lautstaerke(+0.15),                 sagt: "Lauter" },
   { re: /\bleiser\b/,                                  tun: () => lautstaerke(-0.15),                 sagt: "Leiser" }
 ];
@@ -2746,7 +2796,7 @@ function istBefehl(text){
   if(!kurz && !mitName) return false;
   for(const b of SPRACHBEFEHLE){
     if(b.re.test(t)){
-      try{ b.tun(t); }catch(e){}
+      try{ b.tun(text); }catch(e){}   /* Originalsatz: Dateinamen sind groß-/kleinschreibungssensitiv */
       feed("ok", "Sprachbefehl: „" + t.slice(0, 40) + "“ → " + b.sagt);
       toast(b.sagt, 3000);
       try{ stopPlayback(); }catch(e){}     /* sie muss den Befehl nicht kommentieren */
@@ -3732,6 +3782,10 @@ function stopConversation(){
   talkBtn.classList.remove("live");
   setState("idle");
   try{ zeigeAnsicht("buehne", true); }catch(e){}
+  if(S.archivAuto && S.driveFolderId && driveToken && verlaufText().trim()){
+    feed("", "Automatik: Gespräch wird archiviert");
+    setTimeout(() => { try{ archivGespräch(); }catch(e){} }, 800);
+  }
 }
 
 /* ================= Google Drive (nur lesend) ================= */
@@ -3939,6 +3993,241 @@ function driveNoteAusBefehl(satz){
   inhalt = inhalt.replace(/^\s*(hey\s+)?mila[,\s]+/i, "").replace(/[,\s]+(hey\s+)?mila\s*$/i, "").trim();
   if(!inhalt && window.__letzteNutzerRede) inhalt = String(window.__letzteNutzerRede).trim();
   return inhalt;
+}
+
+/* ---------- Werkzeuge fürs Second Brain ----------
+   Gezielt lesen, mit Pfad schreiben, Ordner anlegen, Gespräch archivieren.
+   Alles relativ zum gemerkten Ordner. Pfade wie 10_Wissen/Projekt.md
+   werden ordnerweise aufgelöst; fehlende Ordner nur beim Schreiben anlegen. */
+const ARCHIV_ORDNER = "20_CHATS";   /* nur zur Dokumentation – echte Pfade stehen unten */
+function wzStat(html, cls){ const e = $("wzstat"); if(e){ e.className = "foot " + (cls||""); e.innerHTML = html; } }
+function heuteIso(){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate());
+}
+function themaSlug(s){
+  return String(s || "gespraech").toLowerCase()
+    .replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40) || "gespraech";
+}
+async function driveKinder(eltern, name, nurOrdner){
+  const q = "'" + eltern + "' in parents and name='" + String(name).replace(/\\/g,"\\\\").replace(/'/g,"\\'") + "' and trashed=false"
+          + (nurOrdner ? " and mimeType='application/vnd.google-apps.folder'" : "");
+  const r = await driveApi("files", {q: q, fields: "files(id,name,mimeType)", pageSize: "10"});
+  const j = await r.json();
+  return (j.files && j.files[0]) || null;
+}
+async function driveOrdnerAnlegen(eltern, name){
+  const r = await fetch("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: {Authorization: "Bearer " + driveToken, "Content-Type": "application/json; charset=UTF-8"},
+    body: JSON.stringify({name: name, mimeType: "application/vnd.google-apps.folder", parents: [eltern]})
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error("Ordner anlegen " + r.status + ": " + t.slice(0,120)); }
+  return await r.json();
+}
+async function drivePfad(pfad, anlegen){
+  const teile = String(pfad || "").split("/").map(x => x.trim()).filter(Boolean);
+  if(!teile.length) throw new Error("Kein Pfad angegeben");
+  if(!S.driveFolderId) throw new Error("Kein Ordner gemerkt – erst verbinden und „Merken“ drücken");
+  if(!driveToken) throw new Error("Nicht (mehr) mit Google verbunden");
+  let eltern = S.driveFolderId;
+  const datei = teile.pop();
+  for(const ordner of teile){
+    let f = await driveKinder(eltern, ordner, true);
+    if(!f){
+      if(!anlegen) throw new Error("Ordner „" + ordner + "“ gibt es nicht");
+      f = await driveOrdnerAnlegen(eltern, ordner);
+    }
+    eltern = f.id;
+  }
+  const d = await driveKinder(eltern, datei, false);
+  return {eltern: eltern, name: datei, id: d ? d.id : null};
+}
+async function driveDateiLesen(pfad){
+  const p = await drivePfad(pfad, false);
+  if(!p.id) throw new Error("Datei „" + p.name + "“ nicht gefunden");
+  const mr = await driveApi("files/" + p.id, {fields: "id,name,mimeType"});
+  const m = await mr.json();
+  if(String(m.mimeType||"").indexOf("application/vnd.google-apps.document") === 0){
+    const r = await driveApi("files/" + p.id + "/export", {mimeType: "text/plain"});
+    return {id: p.id, name: p.name, text: await r.text()};
+  }
+  const r = await driveApi("files/" + p.id, {alt: "media"});
+  return {id: p.id, name: p.name, text: await r.text()};
+}
+async function driveDateiSchreiben(pfad, text, anhaengen){
+  const t = String(text == null ? "" : text);
+  const p = await drivePfad(pfad, true);
+  if(!p.id){
+    const r = await fetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: {Authorization: "Bearer " + driveToken, "Content-Type": "application/json; charset=UTF-8"},
+      body: JSON.stringify({name: p.name, parents: [p.eltern], mimeType: "text/markdown"})
+    });
+    if(!r.ok){ const x = await r.text(); throw new Error("Anlegen " + r.status + ": " + x.slice(0,140)); }
+    const j = await r.json();
+    p.id = j.id;
+    await driveUpload("files/" + p.id, t);
+    return {id: p.id, neu: true, pfad: pfad};
+  }
+  if(anhaengen){
+    const alt = await driveDateiLesen(pfad);
+    await driveUpload("files/" + p.id, String(alt.text || "") + t);
+  }else{
+    await driveUpload("files/" + p.id, t);
+  }
+  return {id: p.id, neu: false, pfad: pfad};
+}
+/* --- Gesprächsverlauf aus dem Fenster holen (nichts wird doppelt gespeichert) --- */
+function verlaufText(max){
+  const el = $("log");
+  if(!el) return "";
+  const zeilen = [];
+  const bs = el.querySelectorAll(".bubble");
+  for(let i = 0; i < bs.length; i++){
+    const b = bs[i];
+    const me = b.classList.contains("me");
+    const t = String(b.children[1] ? b.children[1].textContent : b.textContent || "").trim();
+    if(!t || t === "…" || t.charAt(0) === "🎤") continue;
+    zeilen.push((me ? "ICH: " : "MILA: ") + t);
+  }
+  let out = zeilen.join("\n");
+  if(max && out.length > max) out = out.slice(-max);
+  return out;
+}
+async function llmText(prompt, sys, maxTok){
+  if(!S.key) throw new Error("Kein Gemini-Key eingetragen");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + TEXT_MODEL
+            + ":generateContent?key=" + encodeURIComponent(S.key);
+  const res = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      systemInstruction: {parts: [{text: sys || "Du antwortest ausschließlich mit dem verlangten Text."}]},
+      contents: [{role: "user", parts: [{text: prompt}]}],
+      generationConfig: {temperature: 0.4, maxOutputTokens: maxTok || 2048}
+    })});
+  if(!res.ok){ const t = await res.text(); throw new Error("Modell " + res.status + ": " + t.slice(0,140)); }
+  const j = await res.json();
+  const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+              .map(x => x.text || "").join("").trim();
+  if(!out) throw new Error("Modell hat nichts geliefert");
+  return out;
+}
+function archivPrompt(v, datum){
+  return "Schreibe aus dem folgenden gesprochenen Gespräch eine Archivnotiz als Markdown.\n"
+    + "Beginne mit YAML-Frontmatter, genau diese Felder:\n"
+    + "---\ntitle: <kurzer Titel>\nsource: mila\ndate: " + datum + "\ntype: chat\ntags: [<2 bis 5 Stichworte>]\ndescription: <ein Satz>\n---\n\n"
+    + "Danach diese Abschnitte als Überschriften zweiter Ebene, in dieser Reihenfolge:\n"
+    + "## Thema\n## Erarbeitet & entschieden\n## Ergebnisse im Wortlaut\n## Offene Fäden\n## Verwandt\n\n"
+    + "Regeln: Nichts erfinden und nichts ergänzen, was nicht gesagt wurde. In „Ergebnisse im Wortlaut“ "
+    + "stehen die wichtigsten Sätze wörtlich in Anführungszeichen. In „Verwandt“ nur Themen, die im Gespräch vorkamen. "
+    + "Sprache: Deutsch.\n"
+    + "Ganz am Ende, nach einer Leerzeile, ein Aufgabenblock in genau dieser Form:\n"
+    + "<!-- TASKS\n- [ ] Aufgabe\n-->\n"
+    + "Gibt es keine Aufgabe, dann steht im Block nur: - [ ] keine\n\n"
+    + "--- GESPRÄCH ---\n" + v;
+}
+const ARCHIV_SYS = "Du fasst ein gesprochenes Gespräch für ein persönliches Wissensarchiv zusammen und antwortest nur mit der fertigen Markdown-Datei.";
+async function archivGespräch(){
+  if(!driveToken){ wzStat("<b>Erst mit Google verbinden.</b>", "bad"); toast("Nicht mit Drive verbunden", 4000); return false; }
+  if(!S.driveFolderId){ wzStat("<b>Erst den Ordner merken.</b>", "bad"); return false; }
+  const v = verlaufText(14000);
+  if(!v.trim()){ wzStat("<b>Kein Gespräch im Verlauf.</b>", "bad"); toast("Kein Gespräch zum Archivieren", 4000); return false; }
+  const datum = heuteIso();
+  wzStat("Fasse das Gespräch zusammen …");
+  let inhalt = "", roh = false;
+  try{
+    inhalt = await llmText(archivPrompt(v, datum), ARCHIV_SYS, 3000);
+  }catch(e){
+    roh = true;
+    inhalt = "---\ntitle: Gespräch " + datum + "\nsource: mila\ndate: " + datum + "\ntype: chat\ntags: [gespraech]\n"
+           + "description: Roher Verlauf, Zusammenfassung war nicht möglich\n---\n\n## Thema\n" + datum
+           + "\n\n## Ergebnisse im Wortlaut\n" + v.replace(/^(ICH|MILA):/gm, "\n**$1:**").replace(/"/g,'\"') + "\n";
+    feed("w", "Archiv roh abgelegt: " + (e.message || e));
+  }
+  let aufgaben = [];
+  const mb = inhalt.match(/<!--\s*TASKS\s*([\s\S]*?)-->/i);
+  if(mb){
+    aufgaben = mb[1].split("\n").map(z => z.trim())
+      .filter(z => /^-\s*\[/.test(z))
+      .map(z => z.replace(/^-\s*\[[ xX]\]\s*/, "").trim())
+      .filter(z => z && !/^keine$/i.test(z));
+    inhalt = inhalt.replace(mb[0], "").trim();
+  }
+  if(inhalt.charAt(0) !== "-" && inhalt.indexOf("---") !== 0) inhalt = "---\n" + inhalt;
+  const titelZeile = (inhalt.match(/^title:\s*(.+)$/mi) || [])[1] || "";
+  const pfad = "20_Chats/" + datum + "_mila_" + themaSlug(titelZeile) + ".md";
+  try{
+    await driveDateiSchreiben(pfad, "\n" + inhalt + "\n", true);
+  }catch(e){
+    wzStat("<b>Archiv nicht geschrieben:</b> " + (e.message || e), "bad");
+    feed("e", "Archiv: " + (e.message || e));
+    return false;
+  }
+  let zusatz = "";
+  if(aufgaben.length){
+    try{
+      const zeilen = aufgaben.map(a => "- [ ] (" + datum + ") " + a).join("\n");
+      await driveDateiSchreiben("50_Tasks/Tasks.md", "\n" + zeilen + "\n", true);
+      zusatz = " · " + aufgaben.length + " Aufgabe(n) in 50_Tasks/Tasks.md";
+    }catch(e){ zusatz = " · Aufgaben nicht abgelegt: " + (e.message || e); }
+  }
+  wzStat("<b>Archiviert:</b> <code>" + pfad + "</code>" + zusatz
+    + (roh ? " · ohne Zusammenfassung, weil das Modell nicht erreichbar war" : ""), roh ? "warn" : "ok");
+  feed("ok", "Archiv: " + pfad + zusatz);
+  toast("Gespräch archiviert", 4000);
+  return true;
+}
+async function werkzeugLies(pfad){
+  if(!driveToken){ wzStat("<b>Erst mit Google verbinden.</b>", "bad"); toast("Nicht mit Drive verbunden", 4000); return false; }
+  try{
+    wzStat("Lese <code>" + pfad + "</code> …");
+    const d = await driveDateiLesen(pfad);
+    const txt = String(d.text || "").slice(0, 8000);
+    S.driveWissen = ("### " + d.name + "\n" + txt + "\n\n" + String(S.driveWissen || "")).slice(0, 12000);
+    S.driveUse = true; save();
+    wzStat("<b>" + d.name + " gelesen</b> · " + txt.length + " Zeichen im Kopf.", "ok");
+    feed("ok", "Gelesen: " + d.name + " (" + txt.length + " Zeichen)");
+    toast(d.name + " gelesen", 3000);
+    return true;
+  }catch(e){
+    wzStat("<b>Lesen fehlgeschlagen:</b> " + (e.message || e), "bad");
+    feed("e", "Lesen: " + (e.message || e));
+    return false;
+  }
+}
+async function werkzeugSchreib(pfad, text){
+  const t = String(text || "").trim();
+  if(!t){ wzStat("<b>Der Text ist leer.</b>", "bad"); return false; }
+  if(!driveToken){ wzStat("<b>Erst mit Google verbinden.</b>", "bad"); return false; }
+  try{
+    wzStat("Schreibe in <code>" + pfad + "</code> …");
+    const r = await driveDateiSchreiben(pfad, "\n" + t + "\n", true);
+    wzStat("<b>" + (r.neu ? "Angelegt: " : "Ergänzt: ") + "</b> <code>" + pfad + "</code>", "ok");
+    feed("ok", (r.neu ? "Angelegt: " : "Ergänzt: ") + pfad);
+    toast(r.neu ? "Datei angelegt" : "Datei ergänzt", 3000);
+    return true;
+  }catch(e){
+    wzStat("<b>Schreiben fehlgeschlagen:</b> " + (e.message || e), "bad");
+    feed("e", "Schreiben: " + (e.message || e));
+    return false;
+  }
+}
+async function aufgabeAblegen(text){
+  const t = String(text || "").trim();
+  if(!t){ wzStat("<b>Die Aufgabe ist leer.</b>", "bad"); return false; }
+  if(!driveToken){ wzStat("<b>Erst mit Google verbinden.</b>", "bad"); return false; }
+  try{
+    await driveDateiSchreiben("50_Tasks/Tasks.md", "\n- [ ] (" + heuteIso() + ") " + t + "\n", true);
+    wzStat("<b>Aufgabe abgelegt:</b> " + t.slice(0,70), "ok");
+    feed("ok", "Aufgabe: " + t.slice(0,70));
+    toast("Aufgabe abgelegt", 3000);
+    return true;
+  }catch(e){
+    wzStat("<b>Aufgabe nicht abgelegt:</b> " + (e.message || e), "bad");
+    feed("e", "Aufgabe: " + (e.message || e));
+    return false;
+  }
 }
 
 /* ---------- Protokoll: was passiert gerade? ----------
