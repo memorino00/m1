@@ -435,6 +435,16 @@ window.addEventListener("unhandledrejection", function(e){
     </div>
     <div class="foot" id="voiceresult" style="min-height:20px">Probiert das echte Live-Modell mit der gewählten Stimme aus – <b>ohne Mikrofon</b>. Sagt sie hier nichts, liegt es am Modell oder Key, nicht an deinem Mikrofon.</div>
 
+    <label class="lb">Wie ausführlich soll sie antworten?</label>
+    <select id="laenge">
+      <option value="kurz">Kurz – ein, zwei Sätze, wie im Vorbeigehen</option>
+      <option value="normal" selected>Normal – drei bis sechs Sätze, mit Begründung</option>
+      <option value="lang">Ausführlich – erzählt auch mal fünf Minuten, wie ein Podcast</option>
+    </select>
+    <div class="foot">Das war der Grund, warum sie bisher nach zwei Sätzen aufgehört hat – im Charakter stand
+      „kurze Sätze“, und das Modell hat es wörtlich genommen. „Ausführlich“ gilt vor allen anderen Regeln:
+      dann erzählt sie Geschichten zu Ende, statt mitten drin abzubrechen.</div>
+
     <label class="lb">Charakter (was sie im Ohr hat, bevor du redest)</label>
     <textarea id="briefing"></textarea>
 
@@ -646,7 +656,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.2";
+const VERSION = "v6.3";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -670,6 +680,29 @@ const WAKE_RULE = "\n\nNAMENSMODUS ist AN: Ich spreche dich nur mit „Mila“ a
   + "Antworte ausschließlich dann, wenn mein Name in dem gefallen ist, was ich gerade gesagt habe. "
   + "Ohne meinen Namen bleibst du vollständig still – kein Ton, keine Bemerkung, keine Rückfrage.";
 
+/* ---------- Antwortlänge: der Grund, warum sie nur zwei Sätze sagte ---------- */
+const LAENGE_TEXTE = {
+  kurz:   "Antworte knapp: ein bis zwei Sätze. Wie ein Satz im Vorbeigehen.",
+  normal: "Antworte so lang, wie es die Frage verdient: meist drei bis sechs Sätze, "
+        + "mit einem Gedanken, einer Begründung und wenn es passt einem Beispiel. "
+        + "Kein Stichpunkt-Stil, sondern ruhig gesprochene Sätze.",
+  lang:   "Antworte ausführlich und in die Tiefe: gern acht bis fünfzehn Sätze, mehrere Absätze, "
+        + "Beispiele, ein kleiner Umweg, eine eigene Meinung am Ende. "
+        + "Wenn ich dich um eine Geschichte, eine Erklärung oder einen Plan bitte, "
+        + "erzählst du sie vollständig zu Ende – nicht in zwei Sätzen abbrechen."
+};
+function laengeRegel(){
+  const t = LAENGE_TEXTE[S.laenge] || LAENGE_TEXTE.normal;
+  return "\n\nANTWORTLÄNGE (gilt vor allen anderen Regeln, auch vor „kurze Sätze“): " + t
+       + " Sprich in ganzen Sätzen, mit Pausen – Länge darf nie durch Hetzen ersetzt werden.";
+}
+function maxOutText(){ return S.laenge === "lang" ? 1200 : (S.laenge === "kurz" ? 180 : 600); }
+let tokenDeckel = 0;   /* wird gesetzt, falls Google die Token-Grenze ablehnt */
+function maxOutLive(){
+  const base = S.laenge === "lang" ? 4096 : (S.laenge === "kurz" ? 900 : 2400);
+  return tokenDeckel ? Math.min(base, tokenDeckel) : base;
+}
+
 const RUHE_RULE = "\n\nSprich ruhig und langsam, mit natürlichen Pausen – nicht schnell herunterrasseln. "
   + "Warte, bis ich meinen Satz zu Ende gesprochen habe; falle mir nicht ins Wort und fang nicht an, während ich noch rede. "
   + "Wenn du unsicher bist, ob ich fertig bin: kurz warten, dann antworten. "
@@ -692,7 +725,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[],
+  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[], laenge:"normal",
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
@@ -1283,17 +1316,19 @@ function connect(){
     const setup = {
       model: "models/" + S.model.trim(),
       generationConfig: textLive() ? {
+        maxOutputTokens: maxOutLive(),
         /* Schalter rechts: das Modell antwortet mit Text, die Handystimme liest ihn vor.
            Spracheingabe bleibt live – es ist weiterhin ein Gespraech, nur mit lokaler Stimme. */
         responseModalities: ["TEXT"]
       } : {
         responseModalities: ["AUDIO"],
+        maxOutputTokens: maxOutLive(),
         speechConfig: {
           languageCode: /^[a-z]{2}-[A-Z]{2}$/.test(S.lang || "") ? S.lang : "de-DE",
           voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } }
         }
       },
-      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + (S.wake ? WAKE_RULE : "") + LANG_TAIL }] },
+      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + laengeRegel() + (S.wake ? WAKE_RULE : "") + LANG_TAIL }] },
       /* v4.3: Google riet die Sprache (leeres {} = automatisch erkennen) und schrieb
          dein Deutsch als Spanisch, Vietnamesisch oder Koreanisch mit. Mit einem
          BCP-47-Hinweis wird fest auf Deutsch erkannt – Eingang (Mitschrift) wie Ausgang. */
@@ -1369,6 +1404,15 @@ function connect(){
     }
     if(msg.error){
       const roh = msg.error.message || JSON.stringify(msg).slice(0,180);
+      /* Google mag die Token-Grenze nicht? Dann kleiner nachfassen, statt aufzugeben. */
+      if(/maxOutputTokens|max_output_tokens/i.test(roh) && !window.__tokRetry){
+        window.__tokRetry = true; tokenDeckel = 1200;
+        feed("w", "Google mag meine Token-Grenze nicht – ich versuche es mit 1200 statt " + maxOutLive());
+        try{ if(ws && ws.readyState === 1) ws.close(1000, "token-retry"); }catch(e){}
+        ws = null; live = false;
+        setTimeout(() => { try{ reconnect("Token-Grenze angepasst"); }catch(e){} }, 800);
+        return;
+      }
       if(/Invalid value|automatic_activity_detection|realtime_input_config/i.test(roh) && !window.__vadRetry){
         window.__vadRetry = true;
         toast("Google mag meine Zuhör-Einstellungen nicht – ich versuche es schlicht nochmal.", 9000);
@@ -1514,6 +1558,7 @@ function connect(){
         model: "models/" + String(S.model || DEFAULT_MODEL).trim(),
         generationConfig: {
           responseModalities: ["AUDIO"],
+          maxOutputTokens: maxOutLive(),
           speechConfig: { languageCode: S.lang || "de-DE", voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } } }
         },
         systemInstruction: { parts: [{ text: KURZ() }] }
@@ -1582,10 +1627,12 @@ function updateInfo(){
   const mm = String(Math.floor(secs/60)).padStart(2,"0"), ss = String(secs%60).padStart(2,"0");
   const up = ((sentBytes/2)/Math.round(capCtx ? capCtx.sampleRate : 16000)).toFixed(0);
   const down = ((recvBytes/2)/24000).toFixed(0);
-  const stale = (state === "speaking" || state === "thinking") && lastAudioAt && (Date.now() - lastAudioAt > 6000);
+  /* Nur meckern, wenn sie reden SOLL, aber weder Ton kommt noch etwas in der Warteschlange liegt. */
+  let spielt = false; try{ spielt = spieltGerade(); }catch(e){}
+  const stale = (state === "speaking") && !spielt && lastAudioAt && (Date.now() - lastAudioAt > 10000);
   el.innerHTML = "⏱ " + mm + ":" + ss + " · ↑ " + up + " s gesendet · ↓ " + down + " s gehoert · "
     + (aWorklet ? "Worklet" : "Script") + (capCtx ? " " + Math.round(capCtx.sampleRate/1000) + " kHz" : "")
-    + (stale ? ' · <span class="risky">keine Audiodaten – Mikro/Key pruefen</span>' : "");
+    + (stale ? ' · <span class="risky">seit 10 s still – falls sie schweigt, ist das normal</span>' : "");
 }
 
 /* ---------- Neu aufbauen statt sterben ---------- */
@@ -1677,6 +1724,7 @@ function fillCfg(){
   if($("reasr")) $("reasr").checked = S.reASR === true;
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
   if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
+  if($("laenge")) $("laenge").value = S.laenge || "normal";
   try{ wakeUi(); }catch(e){}
   if($("headphones")) $("headphones").checked = S.headphones === true;
   try{ modelListeFuellen(); }catch(e){}
@@ -1693,6 +1741,7 @@ function applyCfg(){
   if(modelLooksDead(S.model)) toast("Achtung: „" + S.model + "“ ist abgeschaltet. Nimm „" + DEFAULT_MODEL + "“ oder druecke „Modelle pruefen“.", 14000);
   S.voice=$("voice").value; S.lang=$("lang").value.trim() || "de-DE";
   S.briefing=$("briefing").value.trim() || DEFAULT_BRIEFING;
+  if($("laenge")) S.laenge = $("laenge").value || "normal";
   S.vad=$("vad").value;
   S.ttsModel=$("ttsmodel").value.trim() || TTS_CANDIDATES[0];
   S.ttsVoice=$("ttsvoice").value || "Kore";
@@ -1984,6 +2033,13 @@ $("sil").addEventListener("input", e => {
 });
 $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save(); });
 if($("wakemode")) $("wakemode").addEventListener("change", e => namensmodus(e.target.value === "an"));
+if($("laenge")) $("laenge").addEventListener("change", e => {
+  S.laenge = e.target.value; save();
+  const was = { kurz:"kurz", normal:"normal", lang:"ausführlich" }[S.laenge] || "normal";
+  feed("", "Antwortlänge: " + was);
+  toast("Antwortlänge: " + was, 4000);
+  if(activeMode === "live") reconnect("Antwortlänge").catch(()=>{});
+});
 
 /* Namensmodus sofort aus – der Schalter oben im Kopf und der Knopf in den Einstellungen */
 if($("wakeChip")) $("wakeChip").addEventListener("click", () => namensmodus(false));
@@ -2753,7 +2809,7 @@ async function fbSend(){
     const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ systemInstruction:{ parts:[{ text: KURZ() }] },
         contents:[{ role:"user", parts:[{ text }] }],
-        generationConfig:{ temperature:0.95, maxOutputTokens:120 } }) });
+        generationConfig:{ temperature:0.95, maxOutputTokens: maxOutText() } }) });
     const j = await res.json();
     const out = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || [])
                   .map(p => p.text || "").join("").trim();
@@ -2781,9 +2837,9 @@ function DRIVE_PART(){
   return "\n\nDas ist der letzte Stand aus dem Second Brain des Nutzers (Auszug, aus Google Drive):\n"
        + String(S.driveWissen).slice(0, 6000);
 }
-const KURZ = () => LANG_RULE + String(S.briefing).slice(0, 900) + DRIVE_PART() + LANG_TAIL
-  + "\n\nWICHTIG: Antworte in hoechstens zwei kurzen Saetzen. Keine Aufzaehlungen, keine Emojis, "
-  + "keine Wiederholung meiner Frage. Wie im echten Gespraech.";
+const KURZ = () => LANG_RULE + String(S.briefing).slice(0, 900) + DRIVE_PART() + laengeRegel() + LANG_TAIL
+  + "\n\nKeine Aufzaehlungen mit Sternchen, keine Emojis, keine Wiederholung meiner Frage. "
+  + "Wie im echten Gespraech gesprochen.";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeMode = null, rec = null, recRunning = false, talking = false;
 let pttBuf = "", pttTimer = null;
@@ -3325,7 +3381,7 @@ async function askText(text){
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: KURZ() }] },
       contents: [{ role: "user", parts: [{ text }] }],
-      generationConfig: { temperature: 0.95, maxOutputTokens: 110 }
+      generationConfig: { temperature: 0.95, maxOutputTokens: maxOutText() }
     })
   });
   const j = await res.json();
