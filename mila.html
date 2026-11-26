@@ -576,10 +576,15 @@ window.addEventListener("unhandledrejection", function(e){
         <tr><td style="padding:5px 0;color:#a99bff">„lauter" · „leiser"</td><td>Lautstärke</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib das ins Gedächtnis"</td><td>legt es in Drive ab (Text davor oder danach zählt)</td></tr>
+        <tr><td style="padding:5px 0;color:#e7c66b">„Mila, schreib ins Gedächtnis: …"</td><td>alles nach dem Doppelpunkt wird die Notiz</td></tr>
       </table>
       <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
         <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
-        Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.</div>
+        Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.<br>
+        <b>Gedächtnis:</b> „Mila, schreib das ins Gedächtnis" nimmt den Satz davor (oder danach) und legt ihn
+        in der Datei <code>Mila-Gedaechtnis.md</code> im gemerkten Drive-Ordner ab. Sagst du nur den Befehl,
+        landet das, was du zuletzt gesagt hast.</div>
     </details>
 
     <details class="grp"><summary>Notreserve · Android-Stimme</summary>
@@ -612,12 +617,12 @@ window.addEventListener("unhandledrejection", function(e){
 
     <details class="grp" id="grpdrive"><summary>Google Drive · Second Brain</summary>
       <label class="lb">Google-Client-ID (einmal eintragen)</label>
-      <input type="text" id="driveclient" placeholder="…apps.googleusercontent.com" autocomplete="off">
+      <input type="text" id="driveclient" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false">
       <div class="row">
         <button id="driveconnect">Mit Google verbinden</button>
         <button id="drivedisconnect" class="ghost">Trennen</button>
       </div>
-      <div class="foot" id="drivestat">Noch nicht verbunden.</div>
+      <div class="foot" id="drivestat">Noch nicht verbunden. Die Client-ID ist schon eingetragen – nur „Mit Google verbinden“ drücken.</div>
 
       <label class="lb">Ordner</label>
       <div class="row">
@@ -630,12 +635,20 @@ window.addEventListener("unhandledrejection", function(e){
       </div>
       <div class="foot" id="drivelearnstat"></div>
 
+      <label class="lb">Ins Gedächtnis schreiben</label>
+      <textarea id="drivenote" rows="3" placeholder="Was soll im Gedächtnis landen?" style="width:100%"></textarea>
+      <div class="row">
+        <button id="drivemem" style="flex:1">Ins Gedächtnis schreiben</button>
+      </div>
+      <div class="foot" id="drivememstat"></div>
+
       <div class="foot"><b>Client-ID besorgen (einmal, am besten am Rechner):</b>
         console.cloud.google.com → Projekt wählen → <i>APIs &amp; Services</i> → <i>Library</i> → „Google Drive API" aktivieren →
         <i>OAuth consent screen</i> (Extern, Testnutzer: die Mila-Adresse) → <i>Credentials</i> → <i>Create credentials</i> →
         <i>OAuth client ID</i> → Typ <b>Web application</b> → bei <i>Authorized JavaScript origins</i> genau
         <code>https://memorino00.github.io</code> eintragen → ID hier einfügen.<br>
-        Der Zugriff ist <b>nur lesend</b> (drive.readonly). Der Schlüssel bleibt im Browser und wird nicht auf dem Server abgelegt.</div>
+        Der Zugriff ist <b>lesend und schreibend</b> auf genau diesen Ordner (Scope <code>auth/drive</code>).
+        Geschrieben wird nur in die eine Datei <code>Mila-Gedaechtnis.md</code>. Der Schlüssel bleibt im Browser und wird nicht auf dem Server abgelegt.</div>
     </details>
 
     </div><!-- /allgTab -->
@@ -671,7 +684,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.8";
+const VERSION = "v6.9";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -752,7 +765,8 @@ let S = {
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
-  driveClientId:"", driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
+  driveClientId:"854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com",
+  driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
 };
 const BAD_MODEL = /2\.5|3\.1-flash-live|preview-tts/i;
 function modelLooksDead(m){ return !m || BAD_MODEL.test(String(m)); }
@@ -1488,6 +1502,8 @@ function connect(frisch){
     if(sc.interrupted){ stopPlayback(); stopLocalSay(); setState("listening"); }
     if(sc.inputTranscription && sc.inputTranscription.text){
       const tr = sc.inputTranscription.text;
+      /* 0) merken, was gerade gesagt wurde – der Gedächtnis-Befehl greift notfalls darauf zurück */
+      window.__letzteNutzerRede = tr;
       /* 1) Sprachbefehl? Dann ausführen – und die Runde gilt als erledigt. */
       if(istBefehl(tr)){ rundeErlaubt = false; }
       /* 2) Namensmodus: nur antworten, wenn „Mila“ gefallen ist. */
@@ -1947,6 +1963,10 @@ $("drivesave").addEventListener("click", () => {
   drvStat(S.driveFolderId ? "Gemerkt: <b>" + S.driveFolderName + "</b>. Jetzt „Wissen einlesen“ tippen." : "Kein Ordner gewählt.", S.driveFolderId ? "ok" : "");
 });
 $("drivelearn").addEventListener("click", () => { driveLearn(); });
+if($("drivemem")) $("drivemem").addEventListener("click", () => {
+  const el = $("drivenote");
+  driveWrite(el ? el.value : "").then(ok => { if(ok && el) el.value = ""; });
+});
 
 /* Datei vom Handy – der Weg über Google Drive:
    Datei in Drive herunterladen, hier auswählen, fertig. Kein CDN, keine Grenze.
@@ -2710,6 +2730,8 @@ const SPRACHBEFEHLE = [
   { re: /\b(namensmodus|namens\s*modus|auf\s*zuruf)\b/, tun: () => namensmodus(true),             sagt: "Namensmodus an" },
   { re: /\b(normalmodus|normal\s*modus|freies\s*gespr(ä|ae)ch|immer\s*antworten)\b/, tun: () => namensmodus(false), sagt: "Normales Gespräch" },
   { re: /\b(stumm|mikro\s*aus|pause)\b/,              tun: () => { try{ setMuted(!muted); }catch(e){} }, sagt: "Mikrofon umgeschaltet" },
+  { re: /\b(schreib|schreibe|notier|notiere|merk|merke|speicher)\w*\b.{0,45}\b(ged(ä|ae)chtnis|gehirn|second\s*brain)\b/,
+                                                        tun: (satz) => { driveWrite(driveNoteAusBefehl(satz)); }, sagt: "Ins Gedächtnis geschrieben" },
   { re: /\blauter\b/,                                  tun: () => lautstaerke(+0.15),                 sagt: "Lauter" },
   { re: /\bleiser\b/,                                  tun: () => lautstaerke(-0.15),                 sagt: "Leiser" }
 ];
@@ -2721,7 +2743,7 @@ function istBefehl(text){
   if(!kurz && !mitName) return false;
   for(const b of SPRACHBEFEHLE){
     if(b.re.test(t)){
-      try{ b.tun(); }catch(e){}
+      try{ b.tun(t); }catch(e){}
       feed("ok", "Sprachbefehl: „" + t.slice(0, 40) + "“ → " + b.sagt);
       toast(b.sagt, 3000);
       try{ stopPlayback(); }catch(e){}     /* sie muss den Befehl nicht kommentieren */
@@ -3724,7 +3746,7 @@ function loadGis(){
   });
   return gisPromise;
 }
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 function drvStat(html, cls){ const e = $("drivestat"); if(e){ e.className = "foot " + (cls||""); e.innerHTML = html; } }
 
 async function driveConnect(){
@@ -3828,6 +3850,92 @@ async function driveLearn(){
     set("<b>Einlesen fehlgeschlagen:</b> " + (e.message || e), "bad");
     feed("e", "Drive-Wissen: " + (e.message || e));
   }
+}
+
+/* ---------- Ins Gedächtnis schreiben (Drive) ----------
+   Eine einzige Datei im gemerkten Ordner: Mila-Gedaechtnis.md
+   Sie wird angelegt, wenn sie fehlt, und sonst Zeile für Zeile ergänzt. */
+const DRIVE_MEM_NAME = "Mila-Gedaechtnis.md";
+let driveMemId = null;
+function drvMemStat(html, cls){ const e = $("drivememstat"); if(e){ e.className = "foot " + (cls||""); e.innerHTML = html; } }
+async function driveFindMemFile(){
+  if(driveMemId) return driveMemId;
+  if(!S.driveFolderId) throw new Error("Kein Ordner gemerkt – erst verbinden, dann den Ordner wählen und „Merken“ drücken.");
+  const r = await driveApi("files", {
+    q: "'" + S.driveFolderId + "' in parents and name='" + DRIVE_MEM_NAME + "' and trashed=false",
+    fields: "files(id,name)", pageSize: "5"
+  });
+  const j = await r.json();
+  driveMemId = (j.files && j.files[0]) ? j.files[0].id : null;
+  return driveMemId;
+}
+async function driveUpload(path, body){
+  if(!driveToken || Date.now() > driveTokenUntil - 60000) throw new Error("Nicht (mehr) verbunden – bitte neu anmelden");
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/" + path, {
+    method: "PATCH",
+    headers: {Authorization: "Bearer " + driveToken, "Content-Type": "text/plain; charset=UTF-8"},
+    body: body
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error("Drive " + r.status + ": " + t.slice(0,160)); }
+  return r;
+}
+async function driveReadMem(id){
+  try{
+    const r = await driveApi("files/" + id, {alt: "media"});
+    return await r.text();
+  }catch(e){ return ""; }
+}
+async function driveWrite(text){
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if(!t){ drvMemStat("<b>Nichts zu schreiben – der Text ist leer.</b>", "bad"); return false; }
+  if(!driveToken){ drvMemStat("<b>Erst mit Google verbinden.</b>", "bad"); feed("w", "Gedächtnis: nicht verbunden"); toast("Nicht mit Drive verbunden", 4000); return false; }
+  try{
+    drvMemStat("Schreibe ins Gedächtnis …");
+    const stempel = new Date().toLocaleString("de-DE", {hour12:false});
+    const zeile = "- [" + stempel + "] " + t.slice(0, 2000) + "\n";
+    let id = await driveFindMemFile();
+    if(!id){
+      const r = await fetch("https://www.googleapis.com/drive/v3/files", {
+        method: "POST",
+        headers: {Authorization: "Bearer " + driveToken, "Content-Type": "application/json; charset=UTF-8"},
+        body: JSON.stringify({name: DRIVE_MEM_NAME, parents: [S.driveFolderId], mimeType: "text/markdown"})
+      });
+      if(!r.ok){ const x = await r.text(); throw new Error("Anlegen " + r.status + ": " + x.slice(0,140)); }
+      const j = await r.json();
+      id = j.id; driveMemId = id;
+      await driveUpload("files/" + id, "# Mila – Gedaechtnis\n\nAus der App geschrieben.\n\n" + zeile);
+    }else{
+      const alt = await driveReadMem(id);
+      await driveUpload("files/" + id, (alt || "") + zeile);
+    }
+    drvMemStat("<b>Im Gedächtnis gespeichert:</b> " + t.slice(0,70) + (t.length > 70 ? " …" : ""), "ok");
+    feed("ok", "Gedächtnis: " + t.slice(0,80));
+    toast("Ins Gedächtnis geschrieben", 3000);
+    return true;
+  }catch(e){
+    drvMemStat("<b>Schreiben fehlgeschlagen:</b> " + (e.message || e), "bad");
+    feed("e", "Gedächtnis: " + (e.message || e));
+    return false;
+  }
+}
+/* „Mila, schreib das ins Gedächtnis“ – der Inhalt kommt aus dem Satz selbst.
+   Ist im Satz nichts außer dem Befehl, zählt das, was zuletzt gesagt wurde. */
+function driveNoteAusBefehl(satz){
+  const roh = String(satz || "");
+  const n = roh.replace(/^\s*(hey\s+)?mila[,\s]+/i, "").trim();
+  const m = n.match(/\b(schreib|schreibe|notier|notiere|merk|merke|speicher)\w*\b/i);
+  let inhalt = "";
+  if(m){
+    const rest = n.slice(m.index + m[0].length);
+    inhalt = rest.replace(/^\s*(dir\s+)?(bitte\s+|mal\s+)?(das\s+|dies\s+|es\s+)?(in\s+das\s+|in\s+den\s+|ins\s+|im\s+|zum\s+|zu\s+den\s+)?(ged(ä|ae)chtnis|gehirn|second\s*brain|notizen?)\s*[:,]?\s*/i, "").trim();
+    if(!inhalt) inhalt = n.slice(0, m.index).trim();
+  }else{
+    inhalt = n;
+  }
+  /* ein „Mila“ mitten im Satz gehört nicht in die Notiz */
+  inhalt = inhalt.replace(/^\s*(hey\s+)?mila[,\s]+/i, "").replace(/[,\s]+(hey\s+)?mila\s*$/i, "").trim();
+  if(!inhalt && window.__letzteNutzerRede) inhalt = String(window.__letzteNutzerRede).trim();
+  return inhalt;
 }
 
 /* ---------- Protokoll: was passiert gerade? ----------
