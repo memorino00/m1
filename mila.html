@@ -155,6 +155,22 @@
 .fassung{background:#3a2a1e;border:1px solid #7a5a3a;border-radius:12px;padding:10px 12px;margin:0 0 14px;
   font-size:13px;line-height:1.5;color:#ffd9b8}
 .fassung b{color:#ffb87a}
+/* Einstellungen: Schnellzugriff, Abschnitte, Suche */
+.quick{background:linear-gradient(160deg,rgba(123,92,255,.14),rgba(180,76,255,.06));border:1px solid rgba(143,123,255,.28);border-radius:14px;padding:12px;margin:2px 0 6px}
+.quickt{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#a99bff;margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);color:#e6e2ff;border-radius:999px;
+      padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;transition:transform .12s,border-color .12s,background .12s}
+.chip:hover,.chip:focus{transform:translateY(-1px);border-color:#8f7bff;background:rgba(143,123,255,.18);outline:none}
+.chip.on{background:linear-gradient(135deg,#7b5cff,#b44cff);border-color:transparent;color:#fff}
+.cfgSuche{width:100%;margin-top:10px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.16);
+          border-radius:10px;color:#ece9f7;padding:10px 12px;font:13.5px system-ui,sans-serif}
+.cfgSuche::placeholder{color:#8d87ad}
+.sec{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#9a93b8;margin:18px 0 2px;padding-left:2px}
+.grp{transition:border-color .15s,background .15s}
+.grp:hover{border-color:rgba(143,123,255,.35)}
+.grp.treffer{border-color:#8f7bff;background:rgba(143,123,255,.1)}
+.grp.versteckt{display:none}
 .grp{border:1px solid rgba(255,255,255,.1);border-radius:12px;margin:10px 0;padding:0 12px;background:rgba(255,255,255,.025)}
 .grp>summary{cursor:pointer;padding:12px 2px;font-weight:600;font-size:14px;color:#cfc9ff;list-style:none}
 .grp>summary::-webkit-details-marker{display:none}
@@ -308,9 +324,9 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="d">Der Key bleibt lokal im Browser. Er geht nur an Google, während das Gespräch läuft.</div>
 
     <div class="mtabs" id="setTabs">
-      <button class="mtab on" data-tab="allg">Einstellungen</button>
-      <button class="mtab" data-tab="mic">Mikrofon-Equalizer</button>
-      <button class="mtab" data-tab="proto">Protokoll</button>
+      <button class="mtab on" data-tab="allg">⚙ Einstellungen</button>
+      <button class="mtab" data-tab="mic">🎚 Mikrofon</button>
+      <button class="mtab" data-tab="proto">📋 Protokoll</button>
     </div>
 
     <div id="protoTab" style="display:none">
@@ -409,8 +425,23 @@ window.addEventListener("unhandledrejection", function(e){
     </div>
 
     <div id="allgTab">
+      <div class="quick">
+        <div class="quickt">Schnellzugriff · tippen springt hin</div>
+        <div class="chips">
+          <button class="chip" data-ziel="0">🔑 Key &amp; Modell</button>
+          <button class="chip" data-ziel="1">🎙 Stimme</button>
+          <button class="chip" data-ziel="2">👂 Zuhören</button>
+          <button class="chip" data-ziel="3">🔌 Verbindung</button>
+          <button class="chip" data-ziel="4">🧠 Gedächtnis</button>
+          <button class="chip" data-ziel="5">🔋 Notreserve</button>
+          <button class="chip" data-ziel="6">📖 Befehle</button>
+        </div>
+        <input type="text" id="cfgSuche" class="cfgSuche" placeholder="Suchen … z. B. Stimme, Pause, Drive, Notreserve" autocomplete="off">
+        <div class="foot" id="cfgSuchStat" style="margin:6px 0 0"></div>
+      </div>
 
-    <details class="grp" open><summary>Gemini · Key, Modell, Charakter</summary>
+      <h3 class="sec">Das Wichtigste</h3>
+      <details class="grp" open><summary>🔑 Gemini · Key, Modell, Charakter</summary>
     <label class="lb">Gemini-API-Key</label>
     <input type="password" id="key" placeholder="AQ… oder AIza…" autocomplete="off">
 
@@ -453,8 +484,38 @@ window.addEventListener("unhandledrejection", function(e){
     <textarea id="briefing"></textarea>
 
     </details>
+      <details class="grp"><summary>🎙 Wer spricht? · Gemini oder Handy-Stimme</summary>
+    <label class="lb">Stimme (neuronales TTS – das ist der Unterschied zu „Roboter aus den 90ern")</label>
+    <input type="text" id="ttsmodel" placeholder="gemini-3.8-flash-tts">
+    <div class="row">
+      <select id="ttsvoice" style="flex:1"></select>
+      <button id="ttsTest">Test (Notbetrieb)</button>
+    </div>
+    <div class="foot">Ohne dieses Feld spricht der Browser – klingt blechern. Mit TTS-Modell kommt die Stimme von Gemini, in derselben Qualität wie bei den Live-Modellen. <b>Kosten:</b> winzig pro Satz, aber nicht gratis.</div>
 
-    <details class="grp" open><summary>Zuhören · wann sie antwortet</summary>
+    <label class="lb">Wer spricht?</label>
+    <div class="swrow">
+      <span class="swlab on" id="swL">Gemini</span>
+      <button id="swVoice" class="sw" role="switch" aria-checked="false" aria-label="Zwischen Gemini und Handy-Stimme umschalten"><i></i></button>
+      <span class="swlab" id="swR">Handy</span>
+    </div>
+    <div class="foot" id="sw3hint"></div>
+
+    <label class="lb">Handy-Stimme (läuft auf dem Gerät, offline)</label>
+    <div class="row">
+      <select id="pvoice" style="flex:1"></select>
+      <button id="pload">Laden</button>
+    </div>
+    <div class="row">
+      <button id="pfile" class="ghost" style="flex:1">📁 Aus Datei übernehmen (Drive)</button>
+      <button id="pstore" class="ghost">Speicher</button>
+    </div>
+    <input type="file" id="pfileinput" accept=".onnx,application/octet-stream" style="display:none">
+    <div class="pbar" id="pbar"><i></i></div>
+    <div class="foot" id="pstat"></div>
+
+    </details>
+      <details class="grp"><summary>👂 Zuhören · wann sie antwortet</summary>
     <label class="lb">Zuhörmodus</label>
     <select id="vad">
       <option value="auto" selected>Automatisch – sie merkt selbst, wenn du fertig bist (wie ein Mensch)</option>
@@ -521,8 +582,7 @@ window.addEventListener("unhandledrejection", function(e){
       Dann <b>Nein</b> wählen (und zum Unterbrechen einfach auf den Kreis tippen) oder Kopfhörer nehmen.</div>
 
     </details>
-
-    <details class="grp" open><summary>Verbindung · wenn sie abreißt</summary>
+      <details class="grp"><summary>🔌 Verbindung · wenn sie abreißt</summary>
     <label class="lb">Nach einem Abbruch</label>
     <select id="reconn">
       <option value="schnell" selected>Schnell zurück – neue Sitzung, dafür in Sekunden wieder da (empfohlen)</option>
@@ -531,95 +591,10 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="foot">Bei einem Netzabbruch gibt Google die alte Sitzung minutenlang nicht frei. „Schnell zurück" versucht
       einmal kurz das Fortsetzen und startet dann sofort neu – sie ist in wenigen Sekunden wieder da, weiß aber nichts
       mehr vom Gespräch davor. „Faden halten" wartet länger und behält den Zusammenhang, wenn es klappt.</div>
-
-    <details class="grp" open><summary>Wer spricht? · Gemini oder Handy-Stimme</summary>
-    <label class="lb">Stimme (neuronales TTS – das ist der Unterschied zu „Roboter aus den 90ern")</label>
-    <input type="text" id="ttsmodel" placeholder="gemini-3.8-flash-tts">
-    <div class="row">
-      <select id="ttsvoice" style="flex:1"></select>
-      <button id="ttsTest">Test (Notbetrieb)</button>
-    </div>
-    <div class="foot">Ohne dieses Feld spricht der Browser – klingt blechern. Mit TTS-Modell kommt die Stimme von Gemini, in derselben Qualität wie bei den Live-Modellen. <b>Kosten:</b> winzig pro Satz, aber nicht gratis.</div>
-
-    <label class="lb">Wer spricht?</label>
-    <div class="swrow">
-      <span class="swlab on" id="swL">Gemini</span>
-      <button id="swVoice" class="sw" role="switch" aria-checked="false" aria-label="Zwischen Gemini und Handy-Stimme umschalten"><i></i></button>
-      <span class="swlab" id="swR">Handy</span>
-    </div>
-    <div class="foot" id="sw3hint"></div>
-
-    <label class="lb">Handy-Stimme (läuft auf dem Gerät, offline)</label>
-    <div class="row">
-      <select id="pvoice" style="flex:1"></select>
-      <button id="pload">Laden</button>
-    </div>
-    <div class="row">
-      <button id="pfile" class="ghost" style="flex:1">📁 Aus Datei übernehmen (Drive)</button>
-      <button id="pstore" class="ghost">Speicher</button>
-    </div>
-    <input type="file" id="pfileinput" accept=".onnx,application/octet-stream" style="display:none">
-    <div class="pbar" id="pbar"><i></i></div>
-    <div class="foot" id="pstat"></div>
-
     </details>
 
-    <details class="grp" id="grpbefehle"><summary>Sprachbefehle · was sie versteht</summary>
-      <div class="foot" style="margin:0 0 8px">Kurze Zurufe (bis 5 Wörter) oder alles mit <b>„Mila“</b> davor.
-        Sie quittiert jeden Befehl mit einer kurzen Meldung und kommentiert ihn nicht.</div>
-      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, zeig den Text"</td><td>Verlauf öffnen</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Protokoll"</td><td>Protokoll öffnen</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Animation" · „zurück"</td><td>zur Bühne</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Gespräch beenden" · „stopp"</td><td>Gespräch beenden</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„stumm" · „Mikro aus"</td><td>Mikrofon umschalten</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„lauter" · „leiser"</td><td>Lautstärke</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib das ins Gedächtnis"</td><td>legt es in Drive ab (Text davor oder danach zählt)</td></tr>
-        <tr><td style="padding:5px 0;color:#e7c66b">„Mila, schreib ins Gedächtnis: …"</td><td>alles nach dem Doppelpunkt wird die Notiz</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, lies 00_Home.md"</td><td>genau diese Datei in den Kopf holen</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib in 10_Wissen/Thema.md: …"</td><td>hängt an die Datei an, legt Ordner bei Bedarf an</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, archivier das Gespräch"</td><td>Zusammenfassung nach 20_Chats/ mit Frontmatter</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Aufgabe: …"</td><td>legt sie in 50_Tasks/Tasks.md ab</td></tr>
-      </table>
-      <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
-        <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
-        Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.<br>
-        <b>Gedächtnis:</b> „Mila, schreib das ins Gedächtnis" nimmt den Satz davor (oder danach) und legt ihn
-        in der Datei <code>Mila-Gedaechtnis.md</code> im gemerkten Drive-Ordner ab. Sagst du nur den Befehl,
-        landet das, was du zuletzt gesagt hast.</div>
-    </details>
-
-    <details class="grp"><summary>Notreserve · Android-Stimme</summary>
-    <label class="lb">Systemstimme des Handys (spricht, wenn das Kontingent leer ist)</label>
-    <div class="row">
-      <select id="sysvoice" style="flex:1"></select>
-      <button id="sysTest">Anhören</button>
-      <button id="sysScan" title="Stimmenliste neu abfragen">🔄</button>
-    </div>
-    <div class="foot" id="sysvstat">Suche die Stimmen des Handys …</div>
-    <div class="foot">Android hat meist mehrere deutsche Stimmen installiert – eine davon klingt deutlich besser
-      als der Standard. Durchprobieren lohnt sich. <b>Kostenlos und ohne Kontingent.</b><br>
-      Fehlen die heruntergeladenen Stimmen: <b>Einstellungen ▸ System ▸ Sprachen ▸ Text-in-Sprache-Ausgabe ▸
-      Google Sprachausgabe ▸ Sprachdaten installieren</b> – und dann hier auf 🔄 tippen.</div>
-
-    <label class="lb">Geduld beim Zuhören: <span id="gracev">1,6</span> s</label>
-    <input type="range" id="grace" min="800" max="3500" step="100" value="1600">
-    <div class="foot">Wie lange sie nach deinem letzten Wort wartet, bevor sie antwortet.
-      Höher stellen, wenn sie dich noch mitten im Satz unterbricht.</div>
-
-    <div class="row">
-      <button id="checkModels">Modelle prüfen</button>
-      <span class="foot" style="margin:0">Fragt Google, welche Modelle dein Key darf – und trägt die richtigen ein.</span>
-    </div>
-    <pre id="modelinfo"></pre>
-
-
-
-    </details>
-
-    <details class="grp" id="grpdrive"><summary>Google Drive · Second Brain</summary>
+      <h3 class="sec">Gedächtnis</h3>
+      <details class="grp" id="grpdrive"><summary>🧠 Google Drive · Gedächtnis</summary>
       <label class="lb">Google-Client-ID (einmal eintragen)</label>
       <input type="text" id="driveclient" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false">
       <div class="row">
@@ -656,6 +631,7 @@ window.addEventListener("unhandledrejection", function(e){
       <div class="row">
         <button id="wzschreib" class="ghost" style="flex:1">An diesen Pfad ergänzen</button>
       </div>
+      <div class="foot" id="wzhinweis"></div>
       <div class="row">
         <button id="wzarchiv" style="flex:1">Gespräch archivieren (20_Chats)</button>
       </div>
@@ -676,7 +652,63 @@ window.addEventListener("unhandledrejection", function(e){
         Geschrieben wird nur in die eine Datei <code>Mila-Gedaechtnis.md</code>. Der Schlüssel bleibt im Browser und wird nicht auf dem Server abgelegt.</div>
     </details>
 
-    </div><!-- /allgTab -->
+      <h3 class="sec">Wenn etwas fehlt</h3>
+      <details class="grp"><summary>🔋 Notreserve · Android-Stimme</summary>
+    <label class="lb">Systemstimme des Handys (spricht, wenn das Kontingent leer ist)</label>
+    <div class="row">
+      <select id="sysvoice" style="flex:1"></select>
+      <button id="sysTest">Anhören</button>
+      <button id="sysScan" title="Stimmenliste neu abfragen">🔄</button>
+    </div>
+    <div class="foot" id="sysvstat">Suche die Stimmen des Handys …</div>
+    <div class="foot">Android hat meist mehrere deutsche Stimmen installiert – eine davon klingt deutlich besser
+      als der Standard. Durchprobieren lohnt sich. <b>Kostenlos und ohne Kontingent.</b><br>
+      Fehlen die heruntergeladenen Stimmen: <b>Einstellungen ▸ System ▸ Sprachen ▸ Text-in-Sprache-Ausgabe ▸
+      Google Sprachausgabe ▸ Sprachdaten installieren</b> – und dann hier auf 🔄 tippen.</div>
+
+    <label class="lb">Geduld beim Zuhören: <span id="gracev">1,6</span> s</label>
+    <input type="range" id="grace" min="800" max="3500" step="100" value="1600">
+    <div class="foot">Wie lange sie nach deinem letzten Wort wartet, bevor sie antwortet.
+      Höher stellen, wenn sie dich noch mitten im Satz unterbricht.</div>
+
+    <div class="row">
+      <button id="checkModels">Modelle prüfen</button>
+      <span class="foot" style="margin:0">Fragt Google, welche Modelle dein Key darf – und trägt die richtigen ein.</span>
+    </div>
+    <pre id="modelinfo"></pre>
+
+
+
+    </details>
+
+      <h3 class="sec">Zum Nachschlagen</h3>
+      <details class="grp" id="grpbefehle"><summary>📖 Sprachbefehle · was sie versteht</summary>
+      <div class="foot" style="margin:0 0 8px">Kurze Zurufe (bis 5 Wörter) oder alles mit <b>„Mila“</b> davor.
+        Sie quittiert jeden Befehl mit einer kurzen Meldung und kommentiert ihn nicht.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, zeig den Text"</td><td>Verlauf öffnen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Protokoll"</td><td>Protokoll öffnen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Animation" · „zurück"</td><td>zur Bühne</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Gespräch beenden" · „stopp"</td><td>Gespräch beenden</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„stumm" · „Mikro aus"</td><td>Mikrofon umschalten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„lauter" · „leiser"</td><td>Lautstärke</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib das ins Gedächtnis"</td><td>legt es in Drive ab (Text davor oder danach zählt)</td></tr>
+        <tr><td style="padding:5px 0;color:#e7c66b">„Mila, schreib ins Gedächtnis: …"</td><td>alles nach dem Doppelpunkt wird die Notiz</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, lies 00_Home.md"</td><td>genau diese Datei in den Kopf holen</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib in 10_Wissen/Thema.md: …"</td><td>hängt an die Datei an, legt Ordner bei Bedarf an</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, archivier das Gespräch"</td><td>Zusammenfassung nach 20_Chats/ mit Frontmatter</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Aufgabe: …"</td><td>legt sie in 50_Tasks/Tasks.md ab</td></tr>
+      </table>
+      <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
+        <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
+        Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.<br>
+        <b>Gedächtnis:</b> „Mila, schreib das ins Gedächtnis" nimmt den Satz davor (oder danach) und legt ihn
+        in der Datei <code>Mila-Gedaechtnis.md</code> im gemerkten Drive-Ordner ab. Sagst du nur den Befehl,
+        landet das, was du zuletzt gesagt hast.</div>
+    </details>
+</div><!-- /allgTab -->
 
     <div class="row">
       <button id="save">Speichern</button>
@@ -709,7 +741,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v7.0.1";
+const VERSION = "v7.1";
 /* Die eigene Google-Client-ID (Projekt „Mila“). Öffentlich, kein Geheimnis. */
 const MILA_CLIENT_ID = "854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com";
 let modelFixed = false;
@@ -1865,6 +1897,7 @@ function openCfg(){
   fillCfg(); updateVoiceUI();
   if(window.speechSynthesis) sysScanVoices(0);
   if($("archivauto")) $("archivauto").checked = !!S.archivAuto;
+  try{ wzLabel(); }catch(e){}
   const dc = $("driveclient");
   if(dc){ dc.value = S.driveClientId || MILA_CLIENT_ID; }
   if(!S.driveClientId) S.driveClientId = MILA_CLIENT_ID;
@@ -1985,6 +2018,15 @@ $("drivedisconnect").addEventListener("click", () => {
   drvStat("Getrennt. Der Ordner bleibt gemerkt, das Wissen auch.");
   feed("w", "Drive getrennt");
 });
+if($("drivefolder")) $("drivefolder").addEventListener("change", () => {
+  const sel = $("drivefolder");
+  if(!sel || !sel.value) return;
+  S.driveFolderId = sel.value;
+  S.driveFolderName = sel.options[sel.selectedIndex].textContent;
+  save();
+  drvStat("Gemerkt: <b>" + S.driveFolderName + "</b>.", "ok");
+  feed("ok", "Ordner gemerkt: " + S.driveFolderName);
+});
 $("drivesave").addEventListener("click", () => {
   const sel = $("drivefolder");
   S.driveFolderId = sel.value || "";
@@ -1997,6 +2039,18 @@ if($("wzlies")) $("wzlies").addEventListener("click", () => {
   const e = $("wzpfad"); if(e && e.value.trim()) werkzeugLies(e.value.trim());
   else wzStat("<b>Erst einen Pfad eintragen, z. B. 00_Home.md</b>", "bad");
 });
+function wzLabel(){
+  const p = $("wzpfad"), b = $("wzschreib"), h = $("wzhinweis");
+  const v = p ? p.value.trim() : "";
+  if(b) b.textContent = v ? "An „" + v + "“ ergänzen" : "An diesen Pfad ergänzen";
+  if(h) h.innerHTML = v
+    ? "Schreibt in <code>" + v + "</code> – bestehender Inhalt bleibt, der neue Text kommt darunter."
+    : "<b>Erst oben einen Pfad eintragen</b>, sonst weiß Mila nicht, wohin.";
+}
+if($("wzpfad")){
+  $("wzpfad").addEventListener("input", wzLabel);
+  $("wzpfad").addEventListener("change", wzLabel);
+}
 if($("wzschreib")) $("wzschreib").addEventListener("click", () => {
   const p = $("wzpfad"), t = $("wztext");
   if(!p || !p.value.trim()){ wzStat("<b>Erst einen Pfad eintragen.</b>", "bad"); return; }
@@ -2834,6 +2888,44 @@ document.querySelectorAll("#setTabs .mtab").forEach(b => {
   b.addEventListener("click", () => showSetTab(b.dataset.tab));
 });
 try{ if(localStorage.getItem(LS + "tab") === "mic") showSetTab("mic"); }catch(e){}
+
+/* ---------- Einstellungen aufgeräumt: nur ein Bereich offen, Suche, Schnellzugriff ---------- */
+function cfgGruppen(){ return Array.prototype.slice.call(document.querySelectorAll("#allgTab details.grp")); }
+function cfgChipsMarkieren(){
+  const offen = cfgGruppen().findIndex(g => g.open);
+  document.querySelectorAll(".quick .chip").forEach(c => c.classList.toggle("on", Number(c.dataset.ziel) === offen));
+}
+cfgGruppen().forEach(g => { g.addEventListener("toggle", () => { if(g.open){ cfgGruppen().forEach(x => { if(x !== g) x.open = false; }); cfgChipsMarkieren(); } }); });
+function cfgSpringeZu(i){
+  const g = cfgGruppen()[i];
+  if(!g) return;
+  g.open = true;
+  try{ g.scrollIntoView({behavior: "smooth", block: "start"}); }catch(e){ g.scrollIntoView(); }
+  const sum = g.querySelector("summary");
+  if(sum){ sum.classList.add("treffer"); setTimeout(() => sum.classList.remove("treffer"), 900); }
+  cfgChipsMarkieren();
+}
+document.querySelectorAll(".quick .chip").forEach(c => c.addEventListener("click", () => cfgSpringeZu(Number(c.dataset.ziel))));
+(function cfgSucheBauen(){
+  const feld = $("cfgSuche"), stat = $("cfgSuchStat");
+  if(!feld) return;
+  feld.addEventListener("input", () => {
+    const q = feld.value.trim().toLowerCase();
+    let treffer = 0;
+    cfgGruppen().forEach(g => {
+      const passt = !q || (g.textContent || "").toLowerCase().indexOf(q) !== -1;
+      g.classList.toggle("versteckt", !passt);
+      if(passt) treffer++;
+      g.open = q ? passt : false;
+    });
+    document.querySelectorAll("#allgTab .sec").forEach(h => { h.style.display = q ? "none" : ""; });
+    const chips = document.querySelector(".quick .chips"); if(chips) chips.style.display = q ? "none" : "";
+    if(stat) stat.innerHTML = q
+      ? (treffer ? "<b>" + treffer + "</b> Bereich(e) passen zu „" + feld.value.trim().slice(0,30) + "“"
+                 : "Nichts gefunden – anderes Wort probieren, z. B. „Stimme“, „Pause“, „Drive“.")
+      : "";
+  });
+})();
 
 /* ---------- Equalizer-Regler ---------- */
 const eqBind = (id, key) => {
@@ -3897,7 +3989,14 @@ async function driveListFolders(){
       sel.appendChild(o);
     });
     if(S.driveFolderId) sel.value = S.driveFolderId;
-    drvStat("Verbunden · " + (j.files || []).length + " Ordner gefunden. Wähle deinen Second-Brain-Ordner und tippe „Merken“.", "ok");
+    if(!sel.value && S.driveFolderName){
+      for(const o of sel.options){ if(o.textContent === S.driveFolderName){ sel.value = o.value; S.driveFolderId = o.value; save(); break; } }
+    }
+    if(sel.value && S.driveFolderId){
+      drvStat("Verbunden · " + (j.files || []).length + " Ordner · gemerkt: <b>" + (S.driveFolderName || sel.options[sel.selectedIndex].textContent) + "</b>", "ok");
+    }else{
+      drvStat("Verbunden · " + (j.files || []).length + " Ordner gefunden. Wähle deinen Second-Brain-Ordner – er wird sofort gemerkt.", "ok");
+    }
   }catch(e){
     drvStat("<b>Ordnerliste ging nicht:</b> " + (e.message || e), "bad");
   }
@@ -4062,10 +4161,23 @@ async function driveOrdnerAnlegen(eltern, name){
   if(!r.ok){ const t = await r.text(); throw new Error("Ordner anlegen " + r.status + ": " + t.slice(0,120)); }
   return await r.json();
 }
+async function driveOrdnerNachName(name){
+  try{
+    const r = await driveApi("files", {
+      q: "mimeType='application/vnd.google-apps.folder' and name='" + String(name).replace(/'/g,"\'") + "' and trashed=false",
+      fields: "files(id,name)", pageSize: "5"
+    });
+    const j = await r.json();
+    const f = (j.files || [])[0];
+    if(f){ S.driveFolderId = f.id; S.driveFolderName = f.name; save(); return f.id; }
+  }catch(e){}
+  return null;
+}
 async function drivePfad(pfad, anlegen){
   const teile = String(pfad || "").split("/").map(x => x.trim()).filter(Boolean);
   if(!teile.length) throw new Error("Kein Pfad angegeben");
-  if(!S.driveFolderId) throw new Error("Kein Ordner gemerkt – erst verbinden und „Merken“ drücken");
+  if(!S.driveFolderId && S.driveFolderName) await driveOrdnerNachName(S.driveFolderName);
+  if(!S.driveFolderId) throw new Error("Kein Ordner gemerkt – erst verbinden, den Ordner im Feld „Ordner“ wählen (wird sofort gespeichert)");
   if(!driveToken) throw new Error("Nicht (mehr) mit Google verbunden");
   let eltern = S.driveFolderId;
   const datei = teile.pop();
