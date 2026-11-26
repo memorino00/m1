@@ -200,6 +200,8 @@
     backdrop-filter:blur(6px)}
   html.ansicht-text .hchip{bottom:156px}
   html.ansicht-proto .hchip{bottom:104px}
+  .hchip.retry{background:rgba(120,170,255,.16);color:#cfe0ff;border-color:rgba(120,170,255,.65)}
+  html.ansicht-text #retryBar{bottom:208px}
   .hchip:active{transform:scale(.98)}
 </style>
 </head>
@@ -214,6 +216,7 @@
   <button id="cfgBtn" title="Einstellungen">⚙</button>
 </header>
 
+<button id="retryBar" class="hchip retry" style="display:none">Verbindung weg – <u>hier antippen zum Neuverbinden</u></button>
 <button id="wakeChip" class="hchip" title="Namensmodus ausschalten">🔔 Namensmodus AN – sie hört nur auf „Mila" · <u>antippen = aus</u></button>
 <div id="diag"><span><b>Selbsttest:</b></span> <span id="dScript">Skript …</span> <span id="dCtx">Kontext …</span> <span id="dMic">Mikro …</span> <span id="dKey">Key …</span> <span id="dProto">Protokoll …</span></div>
 <div class="microw">
@@ -657,7 +660,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.4";
+const VERSION = "v6.5";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -959,10 +962,11 @@ function onMicChunk(f32){
     ws.send(JSON.stringify({
       realtimeInput: { audio: { data: b64encode(pcm), mimeType: "audio/pcm;rate=" + Math.round(capCtx.sampleRate) } }
     }));
-    sentChunks++; sentBytes += pcm.length;
+    sentChunks++; sentBytes += pcm.length; letzterTon = Date.now();
   }catch(e){ /* Socket im Umbau – Chunk verwerfen, nicht die App */ }
 }
 let micBars = [], eqNodes = null, lastPeak = 0, lastPlayAt = 0;
+let letzterTon = 0, letzteAntwort = 0, aufbauGen = 0, zeitTimer = null;
 
 /* Redet sie GERADE aus dem Lautsprecher? Nicht „kam gerade ein Paket an“,
    sondern „es ist noch Ton in der Warteschlange“ – sonst geht das Mikrofon
@@ -1305,6 +1309,10 @@ function transcriptUnklar(t){
 function connect(){
   return new Promise(async (resolve, reject) => {
   if(!S.key){ openCfg(); reject(new Error("Kein Key")); return; }
+  /* Jeder Aufbau bekommt eine Nummer. Timer eines abgebrochenen Versuchs dürfen
+     NICHT in die neue Leitung hineinfeuern – genau das hat den Neuaufbau zerlegt. */
+  const meineGen = ++aufbauGen;
+  clearTimeout(zeitTimer);
   setState("connecting"); talkBtn.disabled = true;
   try{
     await startAudio();
@@ -1391,7 +1399,8 @@ function connect(){
     }
 
     if(msg.setupComplete){
-      if(!live){ feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); eqDrawStart(); zeigeText(false, true); }
+      clearTimeout(zeitTimer);              /* Aufbau fertig – kein Zeitlimit mehr */
+      if(!live){ letzteAntwort = Date.now(); liveWiederDa(); feed("ok", "Live-Sitzung steht – sie hört jetzt zu"); eqDrawStart(); zeigeText(false, true); }
       window.__slowRetry = false;
       live = true; talkBtn.disabled = false; talkBtn.textContent = "Gespräch beenden";
       talkBtn.classList.add("live");
@@ -1461,6 +1470,7 @@ function connect(){
     const sc = msg.serverContent;
     if(!sc) return;
 
+    letzteAntwort = Date.now();
     if(sc.interrupted){ stopPlayback(); stopLocalSay(); setState("listening"); }
     if(sc.inputTranscription && sc.inputTranscription.text){
       const tr = sc.inputTranscription.text;
@@ -1563,7 +1573,8 @@ function connect(){
     }
   };
   const WARTE = 15000;
-  const zeitLimit = (versuch) => setTimeout(() => {
+  const zeitLimit = (versuch) => { zeitTimer = setTimeout(() => {
+    if(meineGen !== aufbauGen) return;      /* alter Versuch – verwerfen */
     if(live) return;
     const offen = !!(ws && ws.readyState === 1);
     if(versuch === 1 && offen){
@@ -1588,7 +1599,7 @@ function connect(){
     reject(new Error("Zeitüberschreitung beim Aufbau (" + netInfo() + ") – " + (offen
       ? "die Leitung stand, Google hat aber in 30 s nicht bestätigt (meist Netz: WLAN probieren, oder Mobilfunk filtert wss://)"
       : "die Verbindung kam gar nicht zustande (wss:// wird blockiert – WLAN probieren, oder Datensparmodus/VPN aus)")));
-  }, WARTE);
+  }, WARTE); };
   zeitLimit(1);
   });
 }
@@ -1653,43 +1664,98 @@ function updateInfo(){
 
 /* ---------- Neu aufbauen statt sterben ---------- */
 let letzterAufbau = 0;
+/* Nach gescheitertem Neuaufbau: Knopf zeigen statt in den Chat-Modus zu werfen. */
+function liveFehlschlag(txt){
+  const b = $("retryBar");
+  if(b){ b.style.display = "block"; b.dataset.grund = txt || ""; }
+  toast("Verbindung weg. Antippen bei „Verbindung weg“ verbindet neu – der Chat-Modus bleibt als Backup.", 12000);
+  try{ setState("muted"); }catch(e){}
+}
+function liveWiederDa(){
+  const b = $("retryBar");
+  if(b) b.style.display = "none";
+  letzteAntwort = Date.now();
+}
+if($("retryBar")) $("retryBar").addEventListener("click", async () => {
+  const b = $("retryBar");
+  if(b) b.innerHTML = "verbinde …";
+  try{
+    if(activeMode !== "live"){ await startConversation(); }
+    else { await reconnect("Knopf"); }
+  }catch(e){
+    toast("Ging nicht: " + (e.message || e), 9000);
+  }finally{
+    const bb = $("retryBar");
+    if(bb){ bb.innerHTML = "Verbindung weg – <u>hier antippen zum Neuverbinden</u>";
+      if(live) bb.style.display = "none"; }
+  }
+});
+
+/* Wächter: hält die Leitung wach, wenn du stumm bist, und merkt, wenn sie tot ist. */
+setInterval(() => {
+  if(!live || !ws || ws.readyState !== 1) return;
+  const jetzt = Date.now();
+  if(letzterTon && jetzt - letzterTon > 25000){
+    try{
+      const rate = capCtx ? capCtx.sampleRate : 16000;
+      const still = new Int16Array(Math.round(rate * 0.1));
+      ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64encode(still), mimeType: "audio/pcm;rate=" + Math.round(rate) } } }));
+      letzterTon = jetzt;
+    }catch(e){}
+  }
+  if(letzteAntwort && jetzt - letzteAntwort > 90000 && jetzt - letzterTon < 5000){
+    feed("w", "Seit 90 s keine Antwort von Google – ich baue die Leitung vorsorglich neu auf");
+    letzteAntwort = jetzt;
+    try{ ws.close(1000, "stumm"); }catch(e){}
+    ws = null; live = false;
+    reconnect("Leitung stumm").catch(()=>{});
+  }
+}, 10000);
+
 async function reconnect(why){
   if(activeMode !== "live") return;
   if(reconnecting) return;
   reconnecting = true;
   toast("Verbindung wird neu aufgebaut" + (why ? " (" + why + ")" : "") + " …", 5000);
   let letzterFehler = null;
-  /* Vier Versuche mit wachsender Pause. „already connected“ und Netzabbrüche
-     sind KEIN Grund, auf Push-to-Talk zurückzufallen – das hat dich mitten im
-     Gespräch rausgeworfen. Nur echte Ablehnungen (Key, Kontingent) brechen ab. */
-  for(let i = 1; i <= 4; i++){
+  /* Google gibt eine abgerissene Sitzung NICHT sofort frei. Mit 1,2 s Abstand
+     prallt jeder Versuch mit „already connected“ ab – genau das ist dir passiert.
+     Jetzt: echte Wartezeiten 2, 6, 12, 20, 30, 45 s (zusammen gut zwei Minuten).
+     Nur echte Ablehnungen (Key, Kontingent) brechen sofort ab. */
+  const wartezeiten = [2000, 6000, 12000, 20000, 30000, 45000];
+  for(let i = 1; i <= wartezeiten.length; i++){
+    const warte = wartezeiten[i - 1];
     try{
-      const warte = Math.max(1200, 3500 - (Date.now() - letzterAufbau));
-      feed("w", "Neuaufbau " + i + "/4 – alte Sitzung wird freigegeben (" + Math.round(warte/1000) + " s)");
+      feed("w", "Neuaufbau " + i + "/" + wartezeiten.length + " – warte " + Math.round(warte/1000)
+        + " s, bis Google die alte Sitzung freigibt");
       await new Promise(r => setTimeout(r, warte));
       try{ if(ws && ws.readyState === 1) ws.close(1000, "reconnect"); }catch(e){}
       ws = null; live = false; stopPlayback();
       try{ stopAudio(); }catch(e){}
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 400));
       letzterAufbau = Date.now();
       await connect();
       setModePill("live");
-      feed("ok", "Live-Sitzung wieder da (Versuch " + i + ")");
+      feed("ok", "Live-Sitzung wieder da (Versuch " + i + ") – du kannst weiterreden");
+      toast("Verbindung ist wieder da.", 4000);
       reconnecting = false;
+      if(typeof liveWiederDa === "function") liveWiederDa();
       return;
     }catch(e){
       letzterFehler = e;
       const m = String((e && e.message) || "");
       if(/Kontingent|quota|abgelehnt|permission|API key|nicht freigeschaltet/i.test(m)) break;
+      /* „already connected“ heißt nur: Google hält noch – weiter warten. */
     }
   }
   reconnecting = false;
-  feed("e", "Neuaufbau nach 4 Versuchen nicht möglich: " + String((letzterFehler && letzterFehler.message) || letzterFehler));
-  toast("Neuaufbau ging nicht: " + String((letzterFehler && letzterFehler.message) || letzterFehler) + " – ich nehme Push-to-Talk.", 14000);
-  try{ disconnect(); }catch(_){}
+  const txt = String((letzterFehler && letzterFehler.message) || letzterFehler || "");
+  feed("e", "Neuaufbau nach " + wartezeiten.length + " Versuchen nicht möglich: " + txt);
+  /* Nicht in den Chat-Modus werfen: Live bleibt stehen, es gibt einen Knopf zum Weiterversuchen. */
   setModePill(null);
-  try{ startPTT(); }catch(_){}
+  liveFehlschlag(txt);
 }
+
 setInterval(() => { if(live && S.stats) updateInfo(); }, 1000);
 
 function disconnect(){
