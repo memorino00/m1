@@ -795,7 +795,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v7.5";
+const VERSION = "v7.6";
 /* Die eigene Google-Client-ID (Projekt „Mila“). Öffentlich, kein Geheimnis. */
 const MILA_CLIENT_ID = "854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com";
 let modelFixed = false;
@@ -2432,7 +2432,11 @@ if($("trTestBtn")) $("trTestBtn").addEventListener("click", () => {
   erg.innerHTML = (was ? "Auslöser: <b>" + was + "</b>" : "Kein Befehl – sie würde normal antworten.")
     + "<br>Zuruf erkannt: <b>" + (name ? "ja" : "nein") + "</b>";
 });
-trInit();
+
+/* trInit() erst nach dem Laden aufrufen: TRAINER_AKTIONEN wird weiter unten
+   deklariert – ein direkter Aufruf hier stirbt an „Cannot access before
+   initialization" und reißt das ganze Skript mit. */
+setTimeout(() => { try{ trInit(); }catch(e){ console.warn("Trainer:", e); } }, 0);
 
 /* ---------- Update: neue Fassung aus Drive holen ---------- */
 const UP_ZEIGER = "https://drive.usercontent.google.com/download?id=1sOmzjRXoovX13bHaH09lnU0imEVHt057&export=download";
