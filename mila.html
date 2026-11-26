@@ -684,7 +684,9 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.9";
+const VERSION = "v6.9.2";
+/* Die eigene Google-Client-ID (Projekt „Mila“). Öffentlich, kein Geheimnis. */
+const MILA_CLIENT_ID = "854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -765,7 +767,7 @@ let S = {
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
-  driveClientId:"854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com",
+  driveClientId:MILA_CLIENT_ID,
   driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true
 };
 const BAD_MODEL = /2\.5|3\.1-flash-live|preview-tts/i;
@@ -1838,7 +1840,8 @@ function openCfg(){
   fillCfg(); updateVoiceUI();
   if(window.speechSynthesis) sysScanVoices(0);
   const dc = $("driveclient");
-  if(dc && !dc.value) dc.value = S.driveClientId || "";
+  if(dc){ dc.value = S.driveClientId || MILA_CLIENT_ID; }
+  if(!S.driveClientId) S.driveClientId = MILA_CLIENT_ID;
   if(S.driveFolderName) drvStat("Ordner gemerkt: <b>" + S.driveFolderName + "</b>."
     + (S.driveWissen ? " · Wissen: " + S.driveWissen.length + " Zeichen" : " · noch kein Wissen eingelesen."));
   $("cfg").classList.add("open");
@@ -3750,7 +3753,7 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 function drvStat(html, cls){ const e = $("drivestat"); if(e){ e.className = "foot " + (cls||""); e.innerHTML = html; } }
 
 async function driveConnect(){
-  const cid = ($("driveclient").value || S.driveClientId || "").trim();
+  const cid = ($("driveclient").value || S.driveClientId || MILA_CLIENT_ID).trim();
   if(!cid){ drvStat("<b>Erst die Client-ID eintragen.</b>", "bad"); return; }
   if(!/\.apps\.googleusercontent\.com$/.test(cid)){
     drvStat("<b>Das sieht nicht nach einer Client-ID aus.</b> Sie endet auf <code>.apps.googleusercontent.com</code>.", "bad"); return;
