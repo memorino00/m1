@@ -577,8 +577,9 @@ window.addEventListener("unhandledrejection", function(e){
         <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
       </table>
-      <div class="foot">Der Namensmodus akzeptiert auch ähnliche Schreibweisen: Mila, Milla, Mia, Myla – und kleine
-        Erkennungsfehler (bis zwei Buchstaben Abweichung).</div>
+      <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
+        <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
+        Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.</div>
     </details>
 
     <details class="grp"><summary>Notreserve · Android-Stimme</summary>
@@ -670,7 +671,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.7";
+const VERSION = "v6.8";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
