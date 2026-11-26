@@ -428,20 +428,22 @@ window.addEventListener("unhandledrejection", function(e){
       <div class="quick">
         <div class="quickt">Schnellzugriff · tippen springt hin</div>
         <div class="chips">
-          <button class="chip" data-ziel="0">🔑 Key &amp; Modell</button>
-          <button class="chip" data-ziel="1">🎙 Stimme</button>
-          <button class="chip" data-ziel="2">👂 Zuhören</button>
-          <button class="chip" data-ziel="3">🔌 Verbindung</button>
-          <button class="chip" data-ziel="4">🧠 Gedächtnis</button>
-          <button class="chip" data-ziel="5">🔋 Notreserve</button>
-          <button class="chip" data-ziel="6">📖 Befehle</button>
+          <button class="chip" data-gruppe="grpgemini">🔑 Key &amp; Modell</button>
+          <button class="chip" data-gruppe="grpstimme">🎙 Stimme</button>
+          <button class="chip" data-gruppe="grphoeren">👂 Zuhören</button>
+          <button class="chip" data-gruppe="grpverbindung">🔌 Verbindung</button>
+          <button class="chip" data-gruppe="grpdrive">🧠 Gedächtnis</button>
+          <button class="chip" data-gruppe="grptrainer">🎓 Trainer</button>
+          <button class="chip" data-gruppe="grpnotreserve">🔋 Notreserve</button>
+          <button class="chip" data-gruppe="grpbefehle">📖 Befehle</button>
+          <button class="chip" data-gruppe="grpupdate">🔄 Update</button>
         </div>
         <input type="text" id="cfgSuche" class="cfgSuche" placeholder="Suchen … z. B. Stimme, Pause, Drive, Notreserve" autocomplete="off">
         <div class="foot" id="cfgSuchStat" style="margin:6px 0 0"></div>
       </div>
 
       <h3 class="sec">Das Wichtigste</h3>
-      <details class="grp" open><summary>🔑 Gemini · Key, Modell, Charakter</summary>
+      <details class="grp" open id="grpgemini"><summary>🔑 Gemini · Key, Modell, Charakter</summary>
     <label class="lb">Gemini-API-Key</label>
     <input type="password" id="key" placeholder="AQ… oder AIza…" autocomplete="off">
 
@@ -484,7 +486,7 @@ window.addEventListener("unhandledrejection", function(e){
     <textarea id="briefing"></textarea>
 
     </details>
-      <details class="grp"><summary>🎙 Wer spricht? · Gemini oder Handy-Stimme</summary>
+      <details class="grp" id="grpstimme"><summary>🎙 Wer spricht? · Gemini oder Handy-Stimme</summary>
     <label class="lb">Stimme (neuronales TTS – das ist der Unterschied zu „Roboter aus den 90ern")</label>
     <input type="text" id="ttsmodel" placeholder="gemini-3.8-flash-tts">
     <div class="row">
@@ -515,7 +517,7 @@ window.addEventListener("unhandledrejection", function(e){
     <div class="foot" id="pstat"></div>
 
     </details>
-      <details class="grp"><summary>👂 Zuhören · wann sie antwortet</summary>
+      <details class="grp" id="grphoeren"><summary>👂 Zuhören · wann sie antwortet</summary>
     <label class="lb">Zuhörmodus</label>
     <select id="vad">
       <option value="auto" selected>Automatisch – sie merkt selbst, wenn du fertig bist (wie ein Mensch)</option>
@@ -582,7 +584,7 @@ window.addEventListener("unhandledrejection", function(e){
       Dann <b>Nein</b> wählen (und zum Unterbrechen einfach auf den Kreis tippen) oder Kopfhörer nehmen.</div>
 
     </details>
-      <details class="grp"><summary>🔌 Verbindung · wenn sie abreißt</summary>
+      <details class="grp" id="grpverbindung"><summary>🔌 Verbindung · wenn sie abreißt</summary>
     <label class="lb">Nach einem Abbruch</label>
     <select id="reconn">
       <option value="schnell" selected>Schnell zurück – neue Sitzung, dafür in Sekunden wieder da (empfohlen)</option>
@@ -653,7 +655,39 @@ window.addEventListener("unhandledrejection", function(e){
     </details>
 
       <h3 class="sec">Wenn etwas fehlt</h3>
-      <details class="grp"><summary>🔋 Notreserve · Android-Stimme</summary>
+      <h3 class="sec">Trainer</h3>
+      <details class="grp" id="grptrainer"><summary>🎓 Trainer · Mila schulen</summary>
+        <div class="foot">Hier bringst du ihr <b>deine</b> Aussprache bei: ein Satz, den du wirklich sagst,
+          wird zum Auslöser für einen Befehl. Sprechen (5 s) oder tippen – beides geht.</div>
+
+        <label class="lb">Wofür soll dein Satz gelten?</label>
+        <select id="trAktion"></select>
+
+        <label class="lb">Dein Satz</label>
+        <input type="text" id="trSatz" placeholder="z. B. Namenrutsch aus" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <button id="trAufnehmen" class="ghost" style="flex:1">🎙 Einsprechen (5 s)</button>
+          <button id="trAdd" style="flex:1">+ Anlernen</button>
+        </div>
+        <div class="row">
+          <button id="trAusProto" class="ghost" style="flex:1">Letzte Mitschrift aus dem Protokoll holen</button>
+        </div>
+        <div class="foot" id="trStat"></div>
+
+        <label class="lb">Prüfen · was würde passieren?</label>
+        <div class="row">
+          <input id="trTest" placeholder="Satz eintippen …" style="flex:1">
+          <button id="trTestBtn" class="ghost">prüfen</button>
+        </div>
+        <div class="foot" id="trTestErg"></div>
+
+        <label class="lb">Gelernt</label>
+        <div id="trListe" class="foot"></div>
+        <div class="foot">Ein Auslöser braucht mindestens <b>zwei Wörter</b> – sonst schlägt er bei jedem Satz an.
+          Zuruf-Namen lernst du unter 👂 Zuhören ▸ Namen üben.</div>
+      </details>
+
+      <details class="grp" id="grpnotreserve"><summary>🔋 Notreserve · Android-Stimme</summary>
     <label class="lb">Systemstimme des Handys (spricht, wenn das Kontingent leer ist)</label>
     <div class="row">
       <select id="sysvoice" style="flex:1"></select>
@@ -692,7 +726,8 @@ window.addEventListener("unhandledrejection", function(e){
         <tr><td style="padding:5px 0;color:#a99bff">„Mila, Gespräch beenden" · „stopp"</td><td>Gespräch beenden</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„stumm" · „Mikro aus"</td><td>Mikrofon umschalten</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„lauter" · „leiser"</td><td>Lautstärke</td></tr>
-        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus"</td><td>nur auf Zuruf antworten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, Namensmodus" · „Mila, Namensmodus an"</td><td>nur auf Zuruf antworten</td></tr>
+        <tr><td style="padding:5px 0;color:#a99bff">„Mila, schalte den Namensmodus aus"</td><td>Namensmodus aus (auch: „deaktiviere", „abschalten", „Namensmodus aus")</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„normales Gespräch"</td><td>Namensmodus aus</td></tr>
         <tr><td style="padding:5px 0;color:#a99bff">„Mila, schreib das ins Gedächtnis"</td><td>legt es in Drive ab (Text davor oder danach zählt)</td></tr>
         <tr><td style="padding:5px 0;color:#e7c66b">„Mila, schreib ins Gedächtnis: …"</td><td>alles nach dem Doppelpunkt wird die Notiz</td></tr>
@@ -704,10 +739,29 @@ window.addEventListener("unhandledrejection", function(e){
       <div class="foot">Der Namensmodus versteht <b>Mila, Milla, Myla, Mia, Milia, Müller</b>, dazu
         <b>Klang-Varianten</b> (Mail, Mahl, Meile, Mühle) bei kurzen Zurufen bis vier Wörtern, kleine
         Tippfehler (ein Buchstabe) und alles, was du unter ⚙ ▸ <b>Namen üben</b> eingesprochen hast.<br>
+        <b>Eigene Auslöser:</b> Unter ⚙ ▸ 🎓 <b>Trainer</b> bringst du Mila Sätze bei, die nur du sagst – sie werden vor diesen festen Befehlen geprüft.<br>
         <b>Gedächtnis:</b> „Mila, schreib das ins Gedächtnis" nimmt den Satz davor (oder danach) und legt ihn
         in der Datei <code>Mila-Gedaechtnis.md</code> im gemerkten Drive-Ordner ab. Sagst du nur den Befehl,
         landet das, was du zuletzt gesagt hast.</div>
     </details>
+
+      <h3 class="sec">Wartung</h3>
+      <details class="grp" id="grpupdate"><summary>🔄 Update · neue Fassung holen</summary>
+        <div class="foot">Hier läuft gerade <b id="upAkt">–</b>. Tippe auf <b>Nachsehen</b>:
+          Mila fragt den Zeiger in Drive, welche Fassung dort liegt. Ist sie neuer, mit
+          <b>Übernehmen</b> in den Speicher legen – dann <b>Seite neu laden</b>.</div>
+        <div class="row">
+          <button id="upCheck" style="flex:1">Nachsehen</button>
+          <button id="upTake" class="ghost" style="flex:1" disabled>Übernehmen</button>
+          <button id="upReload" class="ghost" style="flex:1;display:none">Seite neu laden</button>
+        </div>
+        <div class="foot" id="upStat"></div>
+        <label class="lb">Wo nachgesehen wird (Zeiger-Datei)</label>
+        <input id="upQuelle" spellcheck="false" autocomplete="off">
+        <div class="foot">„Übernehmen" legt die neue Fassung in den Speicher des Handys; von dort startet sie beim
+          nächsten Laden – der Lader nimmt immer die neuere von Speicher und Server. Der Weg über GitHub
+          funktioniert unabhängig davon weiter.</div>
+      </details>
 </div><!-- /allgTab -->
 
     <div class="row">
@@ -741,7 +795,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v7.1";
+const VERSION = "v7.5";
 /* Die eigene Google-Client-ID (Projekt „Mila“). Öffentlich, kein Geheimnis. */
 const MILA_CLIENT_ID = "854789305184-7cdaq3oq5uf41cg33oigviu6df38kabj.apps.googleusercontent.com";
 let modelFixed = false;
@@ -766,6 +820,17 @@ function transLang(){ return /^[a-z]{2}-[A-Z]{2}$/.test((S && S.lang) || "") ? S
 const WAKE_RULE = "\n\nNAMENSMODUS ist AN: Ich spreche dich nur mit „Mila“ an. "
   + "Antworte ausschließlich dann, wenn mein Name in dem gefallen ist, was ich gerade gesagt habe. "
   + "Ohne meinen Namen bleibst du vollständig still – kein Ton, keine Bemerkung, keine Rückfrage.";
+
+/* Die App führt selbst Befehle aus. Ohne diesen Hinweis behauptet das Modell,
+   es würde etwas anzeigen – und dann sieht der Nutzer nichts. */
+const BEFEHL_RULE = "\n\nBEFEHLE DER APP: Die App hat eigene Sprachbefehle und führt sie selbst aus – "
+  + "du nicht. Dazu gehören: „Protokoll“/„Bericht“ (Protokoll öffnen), „Text“/„Verlauf“/„wechsel zum Text“ "
+  + "(Verlauf öffnen), „Animation“/„Kreis“/„zurück“ (Animation zeigen), „stumm“/„Mikro aus“, "
+  + "„lauter“/„leiser“, „Namensmodus“/„normales Gespräch“, „schreib das ins Gedächtnis“, "
+  + "„lies <Datei>“, „archivier das Gespräch“, „Aufgabe: …“, „Gespräch beenden“. "
+  + "Wenn ich einen solchen Befehl sage, führt ihn die App aus. Behaupte deshalb niemals, du würdest "
+  + "etwas anzeigen, öffnen, speichern oder archivieren – das ist nicht deine Aufgabe und stimmt nicht. "
+  + "Sage höchstens ein kurzes Wort wie „erledigt“. Frage nicht nach, ob du es tun sollst.";
 
 /* ---------- Antwortlänge: der Grund, warum sie nur zwei Sätze sagte ---------- */
 const LAENGE_TEXTE = {
@@ -825,7 +890,7 @@ let S = {
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
   driveClientId:MILA_CLIENT_ID,
-  driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true, archivAuto:false
+  driveFolderId:"", driveFolderName:"", driveWissen:"", driveUse:true, archivAuto:false, trainer:{}
 };
 const BAD_MODEL = /2\.5|3\.1-flash-live|preview-tts/i;
 function modelLooksDead(m){ return !m || BAD_MODEL.test(String(m)); }
@@ -941,6 +1006,7 @@ function textUmschalten(){ ansichtWeiter(); }
 /* Alter Name bleibt funktionsfähig (wird an mehreren Stellen benutzt). */
 function zeigeText(ja, still){ zeigeAnsicht(ja ? "text" : "buehne", still); }
 try{ zeigeAnsicht("buehne", true); }catch(e){}   /* Start: Bühne */
+try{ wakeUi(); }catch(e){}                        /* gelbe Anzeige passend zum gespeicherten Stand */
 
 function bubble(text, who){
   if(!text) return null;
@@ -1435,7 +1501,7 @@ function connect(frisch){
           voiceConfig: { prebuiltVoiceConfig: { voiceName: S.voice || "Aoede" } }
         }
       },
-      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + laengeRegel() + (S.wake ? WAKE_RULE : "") + LANG_TAIL }] },
+      systemInstruction: { parts: [{ text: LANG_RULE + S.briefing + DRIVE_PART() + RUHE_RULE + laengeRegel() + (S.wake ? WAKE_RULE : "") + BEFEHL_RULE + LANG_TAIL }] },
       /* v4.3: Google riet die Sprache (leeres {} = automatisch erkennen) und schrieb
          dein Deutsch als Spanisch, Vietnamesisch oder Koreanisch mit. Mit einem
          BCP-47-Hinweis wird fest auf Deutsch erkannt – Eingang (Mitschrift) wie Ausgang. */
@@ -1564,15 +1630,19 @@ function connect(frisch){
       /* 0) merken, was gerade gesagt wurde – der Gedächtnis-Befehl greift notfalls darauf zurück */
       window.__letzteNutzerRede = tr;
       /* 1) Sprachbefehl? Dann ausführen – und die Runde gilt als erledigt. */
-      if(istBefehl(tr)){ rundeErlaubt = false; }
-      /* 2) Namensmodus: nur antworten, wenn „Mila“ gefallen ist. */
-      if(S.wake){
+      const warBefehl = istBefehl(tr);
+      if(warBefehl){ rundeErlaubt = false; }
+      /* 2) Namensmodus: nur antworten, wenn „Mila“ gefallen ist.
+         Nach einem Befehl nicht mehr prüfen – sonst steht im Protokoll
+         „Namensmodus an“ und gleich darauf „kein Mila gehört“. */
+      if(!warBefehl && S.wake){
         const gerufen = nenntNamen(tr);
         rundeErlaubt = gerufen;
         if(!gerufen){
           try{ stopPlayback(); }catch(e){}
           try{ lastHer = null; }catch(e){}
-          feed("", "Namensmodus: kein „Mila“ gehört – Antwort unterdrückt");
+          window.__letzteMitschrift = String(tr || "");
+          feed("", "Namensmodus: kein „Mila“ gehört – Antwort unterdrückt · Mitschrift: „" + String(tr).slice(0,70) + "“");
         }
       }
       if(transcriptUnklar(tr)){
@@ -1898,6 +1968,7 @@ function openCfg(){
   if(window.speechSynthesis) sysScanVoices(0);
   if($("archivauto")) $("archivauto").checked = !!S.archivAuto;
   try{ wzLabel(); }catch(e){}
+  try{ trInit(); }catch(e){}
   const dc = $("driveclient");
   if(dc){ dc.value = S.driveClientId || MILA_CLIENT_ID; }
   if(!S.driveClientId) S.driveClientId = MILA_CLIENT_ID;
@@ -2283,6 +2354,190 @@ if($("wakeOff"))  $("wakeOff").addEventListener("click", () => { namensmodus(fal
 
 /* Namen üben */
 if($("nameTrain"))    $("nameTrain").addEventListener("click", () => nameUeben());
+
+/* ---------- Trainer: Bedienung ---------- */
+async function satzHören(wav){
+  const b64 = b64encode(wav);
+  for(const modell of [ASR_MODEL, TEXT_MODEL]){
+    try{
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modell + ":generateContent?key=" + encodeURIComponent(S.key);
+      const res = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          contents: [{role: "user", parts: [
+            {inlineData: {mimeType: "audio/wav", data: b64}},
+            {text: "Transkribiere wörtlich, was in dieser Aufnahme gesagt wird – auf Deutsch, ohne Anführungszeichen, ohne Erklärung und ohne Korrektur. Gib nur den gesprochenen Satz zurück."}
+          ]}],
+          generationConfig: {temperature: 0, maxOutputTokens: 80}
+        })});
+      const j = await res.json();
+      if(j.error) throw new Error(j.error.message || "Fehler");
+      let t = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+                .map(x => x.text || "").join("").trim();
+      t = t.replace(/^["„»'‚]+|["“«'‘]+$/g, "").trim();
+      if(t.length > 1) return t;
+    }catch(e){ /* nächstes Modell */ }
+  }
+  return "";
+}
+function trInit(){
+  const sel = $("trAktion");
+  if(sel && !sel.options.length){
+    TRAINER_AKTIONEN.forEach(a => {
+      const o = document.createElement("option");
+      o.value = a.key; o.textContent = a.text;
+      sel.appendChild(o);
+    });
+  }
+  trListeZeichnen();
+}
+if($("trAdd")) $("trAdd").addEventListener("click", () => {
+  const f = $("trSatz");
+  if(trAnlernen(f ? f.value : "") && f) f.value = "";
+});
+if($("trAufnehmen")) $("trAufnehmen").addEventListener("click", async () => {
+  const btn = $("trAufnehmen");
+  if(!S.key){ trStatSetzen("<b>Erst den Gemini-Key eintragen</b> (🔑 Gemini).", "bad"); return; }
+  if(live){ trStatSetzen("<b>Bitte erst das Gespräch beenden</b> – das Mikrofon ist belegt.", "bad"); return; }
+  btn.disabled = true; btn.textContent = "🎙 Aufnahme läuft – jetzt sprechen …";
+  trStatSetzen("Ich nehme 5 Sekunden auf …");
+  try{
+    const {pcm, rate} = await nameAufnahme(5);
+    trStatSetzen("Ich frage Google, was verstanden wurde …");
+    const txt = await satzHören(pcmZuWav16k(pcm, rate));
+    if(txt){
+      if($("trSatz")) $("trSatz").value = txt;
+      trStatSetzen("Erkannt: <b>„" + txt.replace(/</g,"&lt;") + "“</b> – jetzt „+ Anlernen“ drücken.", "ok");
+    }else{
+      trStatSetzen("<b>Nichts verstanden.</b> Nochmal, bitte lauter und näher am Mikrofon.", "bad");
+    }
+  }catch(e){
+    trStatSetzen("<b>Aufnahme ging nicht:</b> " + (e.message || e), "bad");
+  }
+  btn.disabled = false; btn.textContent = "🎙 Einsprechen (5 s)";
+});
+if($("trAusProto")) $("trAusProto").addEventListener("click", () => {
+  const t = window.__letzteMitschrift;
+  if(!t){ trStatSetzen("Keine Mitschrift im Speicher. Erst im Gespräch etwas sagen, das sie nicht verstanden hat.", "warn"); return; }
+  if($("trSatz")) $("trSatz").value = t;
+  trStatSetzen("Übernommen: <b>„" + String(t).replace(/</g,"&lt;") + "“</b> – Aktion wählen, dann „+ Anlernen“.", "ok");
+});
+if($("trTestBtn")) $("trTestBtn").addEventListener("click", () => {
+  const q = ($("trTest") || {}).value || "";
+  const erg = $("trTestErg");
+  if(!erg) return;
+  if(!q.trim()){ erg.className = "foot bad"; erg.innerHTML = "<b>Erst einen Satz eintippen.</b>"; return; }
+  const was = istBefehlTrocken(q);
+  const name = (typeof nenntNamen === "function") ? nenntNamen(q) : false;
+  erg.className = "foot " + (was ? "ok" : "");
+  erg.innerHTML = (was ? "Auslöser: <b>" + was + "</b>" : "Kein Befehl – sie würde normal antworten.")
+    + "<br>Zuruf erkannt: <b>" + (name ? "ja" : "nein") + "</b>";
+});
+trInit();
+
+/* ---------- Update: neue Fassung aus Drive holen ---------- */
+const UP_ZEIGER = "https://drive.usercontent.google.com/download?id=1sOmzjRXoovX13bHaH09lnU0imEVHt057&export=download";
+let upFund = null;
+function verNeuer(a, b){                 /* ist a neuer als b? – Zahl für Zahl, also v7.10 > v7.9 */
+  const z = v => (String(v || "").match(/\d+/g) || []).map(Number);
+  const x = z(a), y = z(b);
+  for(let i = 0; i < Math.max(x.length, y.length); i++){
+    const p = x[i] || 0, q = y[i] || 0;
+    if(p !== q) return p > q;
+  }
+  return false;
+}
+function upStat(h, c){ const e = $("upStat"); if(e){ e.className = "foot " + (c || ""); e.innerHTML = h; } }
+function upDb(){
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open("mila-app", 1);
+    rq.onupgradeneeded = () => { try{ rq.result.createObjectStore("fassungen"); }catch(e){} };
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+async function upMerken(html){
+  const db = await upDb();
+  await new Promise((res, rej) => {
+    const tx = db.transaction("fassungen", "readwrite");
+    tx.objectStore("fassungen").put(html, "aktuell");
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error || new Error("Speichern abgelehnt"));
+  });
+}
+async function upHolen(){
+  const feld = $("upQuelle");
+  const quelle = (feld && feld.value.trim()) || UP_ZEIGER;
+  upFund = null;
+  if($("upTake")) $("upTake").disabled = true;
+  upStat("Ich frage nach …");
+  let zeiger = "";
+  try{
+    const r = await fetch(quelle + (quelle.includes("?") ? "&" : "?") + "t=" + Date.now(), {cache: "no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    zeiger = await r.text();
+  }catch(e){
+    upStat("<b>Zeiger nicht erreichbar:</b> " + (e.message || e), "bad");
+    return null;
+  }
+  let ziel = (String(zeiger).match(/https:\/\/[^\s"'<>]+/) || [])[0] || "";
+  if(!ziel){
+    const idm = String(zeiger).match(/[A-Za-z0-9_-]{25,}/);
+    if(idm) ziel = "https://drive.usercontent.google.com/download?id=" + idm[0] + "&export=download";
+  }
+  if(!ziel){
+    upStat("<b>Im Zeiger steht keine Adresse.</b> Inhalt: <code>"
+      + String(zeiger).slice(0,140).replace(/</g,"&lt;") + "</code>", "bad");
+    return null;
+  }
+  const idm2 = ziel.match(/id=([A-Za-z0-9_-]{10,})/);
+  if(idm2 && !/usercontent\.google\.com/.test(ziel))
+    ziel = "https://drive.usercontent.google.com/download?id=" + idm2[1] + "&export=download";
+  upStat("Ich lade die Fassung … das dauert ein paar Sekunden.");
+  let html = "";
+  try{
+    const r = await fetch(ziel, {cache: "no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    html = await r.text();
+  }catch(e){
+    upStat("<b>Datei nicht ladbar:</b> " + (e.message || e), "bad");
+    return null;
+  }
+  const v = (String(html).match(/const\s+VERSION\s*=\s*"([^"]+)"/) || [])[1] || "";
+  if(!v || !/<\/html>/i.test(html) || html.length < 50000){
+    upStat("<b>Das ist keine App-Datei</b> – " + Math.round(html.length / 1024) + " KB, Version: "
+      + (v || "keine gefunden") + ".", "bad");
+    return null;
+  }
+  upFund = {html: html, v: v, kb: Math.round(html.length / 1024)};
+  const neuer = verNeuer(v, VERSION);
+  upStat("Im Netz: <b>" + v + "</b> · " + upFund.kb + " KB<br>Hier läuft: <b>" + VERSION + "</b><br>"
+    + (neuer ? "<b>Neuere Fassung gefunden</b> – auf „Übernehmen“ tippen."
+             : (v === VERSION ? "Das ist dieselbe Fassung – nichts zu tun."
+                              : "Die im Netz ist älter – nichts zu tun.")),
+    neuer ? "ok" : "");
+  if($("upTake")) $("upTake").disabled = !neuer;
+  return upFund;
+}
+async function upUebernehmen(){
+  if(!upFund || !$("upTake") || $("upTake").disabled){ upStat("Erst „Nachsehen“ drücken.", "warn"); return; }
+  try{
+    await upMerken(upFund.html);
+    upStat("<b>" + upFund.v + " liegt im Speicher.</b> Jetzt die Seite neu laden – dann läuft die neue Fassung.", "ok");
+    feed("ok", "Update: " + upFund.v + " bereitgelegt · Seite neu laden");
+    toast(upFund.v + " bereit – Seite neu laden", 4000);
+  }catch(e){
+    upStat("<b>Speichern ging nicht:</b> " + (e.message || e) + "<br>Nimm „Seite neu laden“ – der Lader holt die Fassung dann selbst.", "bad");
+  }
+  if($("upReload")) $("upReload").style.display = "";
+}
+if($("upCheck"))  $("upCheck").addEventListener("click", () => upHolen());
+if($("upTake"))   $("upTake").addEventListener("click", () => upUebernehmen());
+if($("upReload")) $("upReload").addEventListener("click", () => location.reload());
+if($("upQuelle")){
+  $("upQuelle").value = S.upQuelle || UP_ZEIGER;
+  $("upQuelle").addEventListener("change", () => { S.upQuelle = $("upQuelle").value.trim(); save(); });
+}
+if($("upAkt")) $("upAkt").textContent = VERSION;
 if($("nameAdd"))      $("nameAdd").addEventListener("click", () => {
   const i = $("nameHand"); if(!i) return;
   const w = i.value.trim();
@@ -2613,7 +2868,9 @@ function namensmodus(an){
   wakeUi();
   feed("", S.wake ? "Namensmodus AN – sie antwortet nur, wenn du „Mila“ sagst" : "Namensmodus aus – normales Gespräch");
   toast(S.wake ? "Namensmodus an: erst „Mila“ sagen" : "Normales Gespräch", 5000);
-  if(activeMode === "live") reconnect("Namensmodus").catch(()=>{});   /* Systemtext neu senden */
+  /* Kein Neuaufbau mehr: die App entscheidet ohnehin selbst, ob geantwortet wird.
+     Vorher wurde bei jedem Umschalten das Gespräch beendet und neu gestartet. */
+  if(activeMode === "live") feed("", "Namensmodus wirkt sofort – das Gespräch läuft weiter");
 }
 
 /* Wird der Name genannt? Google schreibt „Mila“ mal als Mila, Milla, Mia, Müler …
@@ -2779,7 +3036,8 @@ function nenntNamen(text){
     .replace(/[^a-zäöüß\s]/g, " ")
     .replace(/\s+/g, " ").trim();
   if(!roh) return false;
-  const fest = ["mila","milla","myla","miela","milah","mia","mirla","mile","milla","müller","muller","muela"];
+  const fest = ["mila","milla","myla","miela","milah","mia","mirla","mile","müller","muller","mueller","muela",
+                "maila","mala","mula","mela","mella","milo","milan","milia","milu","milih","mille","millar","milar","müla"];
   const woerter = roh.split(" ");
   const abstand = (a, b) => {
     const m = a.length, n = b.length;
@@ -2797,15 +3055,17 @@ function nenntNamen(text){
       else if(woerter.includes(e)) return true;
     }
   }
-  const kurz = woerter.length <= 4;          /* Zuruf, kein langer Satz */
+  const kurz = woerter.length <= 4;          /* Zuruf, kein langer Satz – sonst löst „Das ist eine Mail für dich“ aus */
   const ziel = koelnerCode("mila");          /* „65“ */
   const kurzZiel = koelnerCode("mia");       /* „6“  */
-  for(const w of woerter){
+  for(let i = 0; i < woerter.length; i++){
+    const w = woerter[i];
     if(fest.includes(w)) return true;
     /* Tippfehler: ein Buchstabe Abweichung */
     if(w.length >= 3 && w.length <= 6 && abstand(w, "mila") <= 1) return true;
-    /* Klang: greift nur bei kurzen Zurufen – so löst „Das ist eine Mail für dich“ nicht aus */
-    if(kurz && w.length >= 2 && w.length <= 7){
+    /* Klang: bei kurzen Zurufen oder wenn das Wort am Anfang steht (Anrede).
+       So löst „Hey Mail, bist du wach“ aus, „Das ist eine Mail für dich“ aber nicht. */
+    if((kurz || i <= 1) && w.length >= 2 && w.length <= 7){
       const c = koelnerCode(w);
       if(c && c === ziel) return true;
       if(c && c === kurzZiel && w.length <= 4) return true;
@@ -2822,13 +3082,133 @@ function lautstaerke(d){
     toast("Lautstärke " + Math.round(playGain.gain.value * 100) + " %", 2500);
   }catch(e){}
 }
+/* ---------- Trainer: eigene Auslöser für Befehle ----------
+   Der Nutzer lernt Sätze an, die er wirklich sagt. Sie werden vor den festen
+   Befehlen geprüft und Wort für Wort verglichen (ein Buchstabe Toleranz). */
+const TRAINER_AKTIONEN = [
+  { key: "wake_an",   text: "Namensmodus an",           tun: () => namensmodus(true) },
+  { key: "wake_aus",  text: "Namensmodus aus",          tun: () => namensmodus(false) },
+  { key: "text",      text: "Verlauf / Text öffnen",    tun: () => zeigeAnsicht("text") },
+  { key: "proto",     text: "Protokoll öffnen",         tun: () => zeigeAnsicht("proto") },
+  { key: "buehne",    text: "Animation zeigen",         tun: () => zeigeAnsicht("buehne") },
+  { key: "stumm",     text: "Mikrofon umschalten",      tun: () => { try{ setMuted(!muted); }catch(e){} } },
+  { key: "lauter",    text: "lauter",                   tun: () => lautstaerke(0.15) },
+  { key: "leiser",    text: "leiser",                   tun: () => lautstaerke(-0.15) },
+  { key: "archiv",    text: "Gespräch archivieren",     tun: () => archivGespräch() },
+  { key: "ende",      text: "Gespräch beenden",         tun: () => stopConversation() }
+];
+function trNorm(t){
+  return String(t || "").toLowerCase()
+    .replace(/ä/g,"a").replace(/ö/g,"o").replace(/ü/g,"u").replace(/ß/g,"ss")
+    .replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+}
+function trAbstand(a, b){
+  const m = a.length, n = b.length;
+  if(!m) return n; if(!n) return m;
+  let vor = new Array(n + 1);
+  for(let j = 0; j <= n; j++) vor[j] = j;
+  for(let i = 1; i <= m; i++){
+    const jetzt = [i];
+    for(let j = 1; j <= n; j++)
+      jetzt[j] = Math.min(vor[j] + 1, jetzt[j-1] + 1, vor[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    vor = jetzt;
+  }
+  return vor[n];
+}
+function trPasst(satz, alias){
+  const s = trNorm(satz), a = trNorm(alias);
+  if(!a) return false;
+  if(s === a) return true;                             /* genau dieser Satz */
+  const sw = s.split(" "), aw = a.split(" ");
+  if(aw.length < 2) return false;                      /* ein Wort ist zu unscharf */
+  if(s.indexOf(a) !== -1) return true;                 /* wörtlich enthalten */
+  let ok = 0;
+  for(const x of aw){
+    if(sw.some(y => y === x || (x.length >= 3 && y.length >= 3 && trAbstand(x, y) <= 1))) ok++;
+  }
+  return ok === aw.length;
+}
+function trainerTreffer(text){
+  const tr = S.trainer || {};
+  for(const akt of TRAINER_AKTIONEN){
+    const liste = tr[akt.key] || [];
+    for(const alias of liste){ if(trPasst(text, alias)) return akt; }
+  }
+  return null;
+}
+function trStatSetzen(h, c){ const e = $("trStat"); if(e){ e.className = "foot " + (c||""); e.innerHTML = h; } }
+function trListeZeichnen(){
+  const box = $("trListe");
+  if(!box) return;
+  const tr = S.trainer || {};
+  let html = "", gesamt = 0;
+  for(const akt of TRAINER_AKTIONEN){
+    const liste = tr[akt.key] || [];
+    if(!liste.length) continue;
+    gesamt += liste.length;
+    html += "<div style=\"margin:6px 0 2px\"><b>" + akt.text + "</b></div>";
+    liste.forEach((satz, i) => {
+      html += "<div style=\"display:flex;gap:8px;align-items:center;margin:2px 0\">"
+            + "<span style=\"flex:1;opacity:.9\">„" + String(satz).replace(/</g,"&lt;") + "“</span>"
+            + "<button class=\"chip trDel\" data-aktion=\"" + akt.key + "\" data-nr=\"" + i + "\" style=\"padding:4px 9px\">🗑</button>"
+            + "</div>";
+    });
+  }
+  box.innerHTML = gesamt ? html : "Noch nichts gelernt – die festen Befehle gelten weiter.";
+  box.querySelectorAll(".trDel").forEach(b => b.addEventListener("click", () => {
+    const k = b.dataset.aktion, nr = Number(b.dataset.nr);
+    if(S.trainer && S.trainer[k]){ S.trainer[k].splice(nr, 1); save(); trListeZeichnen(); trStatSetzen("Gelöscht."); }
+  }));
+}
+function trAnlernen(satz){
+  const sel = $("trAktion");
+  const aktKey = sel ? sel.value : "";
+  const s = String(satz || "").trim();
+  if(!aktKey){ trStatSetzen("<b>Keine Aktion gewählt.</b>", "bad"); return false; }
+  if(s.length < 3){ trStatSetzen("<b>Der Satz ist zu kurz.</b>", "bad"); return false; }
+  if(trNorm(s).split(" ").length < 2){
+    trStatSetzen("<b>Bitte mindestens zwei Wörter.</b> Ein einzelnes Wort löst sonst bei jedem Satz aus.", "bad");
+    return false;
+  }
+  S.trainer = S.trainer || {};
+  const liste = S.trainer[aktKey] || (S.trainer[aktKey] = []);
+  if(liste.some(x => trNorm(x) === trNorm(s))){ trStatSetzen("Diesen Satz kenne ich schon.", "warn"); return false; }
+  liste.push(s); save(); trListeZeichnen();
+  const name = (TRAINER_AKTIONEN.find(a => a.key === aktKey) || {}).text || aktKey;
+  trStatSetzen("<b>Gelernt:</b> „" + s.replace(/</g,"&lt;") + "“ → " + name, "ok");
+  feed("ok", "Trainer: „" + s.slice(0,40) + "“ → " + name);
+  toast("Gelernt: " + s.slice(0,30), 3000);
+  return true;
+}
+/* Für das Prüffeld: was würde passieren – ohne etwas auszuführen. */
+function istBefehlTrocken(text){
+  const t = String(text || "").toLowerCase().trim();
+  if(!t) return null;
+  const kurz = t.split(/\s+/).length <= 5;
+  const mitName = /^(hey\s+)?mila\b/.test(t) || /\bmila\b/.test(t);
+  if(!kurz && !mitName) return null;
+  const alias = trainerTreffer(t);
+  if(alias) return "🎓 " + alias.text;
+  for(const b of SPRACHBEFEHLE){ if(b.re.test(t)) return b.sagt; }
+  return null;
+}
 const SPRACHBEFEHLE = [
   { re: /\b(protokoll|bericht)\b/,                     tun: () => zeigeAnsicht("proto"),             sagt: "Protokoll geöffnet" },
-  { re: /\b(text\s*(anzeigen|lesen)|zeig\s*(mir\s*)?den\s*text|verlauf)\b/, tun: () => zeigeAnsicht("text"), sagt: "Verlauf geöffnet" },
+  { re: /(wechsel\w*|geh\w*|schalte?\w*|zeig\w*|mach\w*)\s*(zum|zur|in\s*den|auf\s*den|in\s*das)?\s*(text|verlauf|textansicht|schreibmodus)/,
+                                                        tun: () => zeigeAnsicht("text"),              sagt: "Verlauf geöffnet" },
+  { re: /\b(text\s*(ansicht|anzeigen|lesen|modus)|zum\s*text|zeig\w*\s*(mir\s*)?(den\s*)?(text|verlauf)|verlauf|schreibmodus)\b/,
+                                                        tun: () => zeigeAnsicht("text"),              sagt: "Verlauf geöffnet" },
   { re: /\b(animation|kreis|zur(ü|ue)ck)\b/,          tun: () => zeigeAnsicht("buehne"),            sagt: "Animation" },
   { re: /\b(gespr(ä|ae)ch\s*beenden|beenden|aufh(ö|oe)ren|stopp)\b/, tun: () => stopConversation(),  sagt: "Gespräch beendet" },
+  /* „aus“ zuerst prüfen, sonst gewinnt das allgemeine „namensmodus“ */
+  { re: /(?:aus|deaktivier\w*|abschalt\w*|ausschalt\w*|ausmachen|abstellen|weg\s*damit|beenden).{0,30}?(namensmodus|namens\s*modus|auf\s*zuruf)/,
+                                                        tun: () => namensmodus(false),                sagt: "Namensmodus aus" },
+  { re: /(namensmodus|namens\s*modus|auf\s*zuruf).{0,30}?(aus|deaktivier\w*|abschalt\w*|ausschalt\w*|ausmachen|abstellen|beenden)/,
+                                                        tun: () => namensmodus(false),                sagt: "Namensmodus aus" },
+  { re: /(an|aktivier\w*|einschalt\w*|anschalt\w*|anmachen).{0,30}?(namensmodus|namens\s*modus|auf\s*zuruf)/,
+                                                        tun: () => namensmodus(true),                 sagt: "Namensmodus an" },
   { re: /\b(namensmodus|namens\s*modus|auf\s*zuruf)\b/, tun: () => namensmodus(true),             sagt: "Namensmodus an" },
-  { re: /\b(normalmodus|normal\s*modus|freies\s*gespr(ä|ae)ch|immer\s*antworten)\b/, tun: () => namensmodus(false), sagt: "Normales Gespräch" },
+  { re: /\b(normalmodus|normal\s*modus|normales?\s*gespr(ä|ae)ch|freies?\s*gespr(ä|ae)ch|ohne\s*zuruf|immer\s*antworten)\b/, tun: () => namensmodus(false), sagt: "Normales Gespräch" },
   { re: /\b(stumm|mikro\s*aus|pause)\b/,              tun: () => { try{ setMuted(!muted); }catch(e){} }, sagt: "Mikrofon umgeschaltet" },
   { re: /\b(schreib|schreibe|notier|notiere|merk|merke|speicher)\w*\b.{0,45}\b(ged(ä|ae)chtnis|gehirn|second\s*brain)\b/,
                                                         tun: (satz) => { driveWrite(driveNoteAusBefehl(satz)); }, sagt: "Ins Gedächtnis geschrieben" },
@@ -2849,6 +3229,15 @@ function istBefehl(text){
   const kurz = t.split(/\s+/).length <= 5;                    /* nur kurze Zurufe */
   const mitName = /^(hey\s+)?mila\b/.test(t) || /\bmila\b/.test(t);
   if(!kurz && !mitName) return false;
+  /* Zuerst die gelernten Sätze – die kennt der Nutzer besser als meine Muster. */
+  const gelernt = trainerTreffer(t);
+  if(gelernt){
+    try{ gelernt.tun(); }catch(e){}
+    feed("ok", "Trainer: „" + t.slice(0, 40) + "“ → " + gelernt.text);
+    toast(gelernt.text, 3000);
+    try{ stopPlayback(); }catch(e){}
+    return true;
+  }
   for(const b of SPRACHBEFEHLE){
     if(b.re.test(t)){
       try{ b.tun(text); }catch(e){}   /* Originalsatz: Dateinamen sind groß-/kleinschreibungssensitiv */
@@ -2892,12 +3281,12 @@ try{ if(localStorage.getItem(LS + "tab") === "mic") showSetTab("mic"); }catch(e)
 /* ---------- Einstellungen aufgeräumt: nur ein Bereich offen, Suche, Schnellzugriff ---------- */
 function cfgGruppen(){ return Array.prototype.slice.call(document.querySelectorAll("#allgTab details.grp")); }
 function cfgChipsMarkieren(){
-  const offen = cfgGruppen().findIndex(g => g.open);
-  document.querySelectorAll(".quick .chip").forEach(c => c.classList.toggle("on", Number(c.dataset.ziel) === offen));
+  const offen = cfgGruppen().filter(g => g.open).map(g => g.id);
+  document.querySelectorAll(".quick .chip").forEach(c => c.classList.toggle("on", offen.indexOf(c.dataset.gruppe) !== -1));
 }
 cfgGruppen().forEach(g => { g.addEventListener("toggle", () => { if(g.open){ cfgGruppen().forEach(x => { if(x !== g) x.open = false; }); cfgChipsMarkieren(); } }); });
-function cfgSpringeZu(i){
-  const g = cfgGruppen()[i];
+function cfgSpringeZu(id){
+  const g = document.getElementById(id);
   if(!g) return;
   g.open = true;
   try{ g.scrollIntoView({behavior: "smooth", block: "start"}); }catch(e){ g.scrollIntoView(); }
@@ -2905,7 +3294,7 @@ function cfgSpringeZu(i){
   if(sum){ sum.classList.add("treffer"); setTimeout(() => sum.classList.remove("treffer"), 900); }
   cfgChipsMarkieren();
 }
-document.querySelectorAll(".quick .chip").forEach(c => c.addEventListener("click", () => cfgSpringeZu(Number(c.dataset.ziel))));
+document.querySelectorAll(".quick .chip").forEach(c => c.addEventListener("click", () => cfgSpringeZu(c.dataset.gruppe)));
 (function cfgSucheBauen(){
   const feld = $("cfgSuche"), stat = $("cfgSuchStat");
   if(!feld) return;
@@ -3121,7 +3510,7 @@ function DRIVE_PART(){
   return "\n\nDas ist der letzte Stand aus dem Second Brain des Nutzers (Auszug, aus Google Drive):\n"
        + String(S.driveWissen).slice(0, 6000);
 }
-const KURZ = () => LANG_RULE + String(S.briefing).slice(0, 900) + DRIVE_PART() + laengeRegel() + LANG_TAIL
+const KURZ = () => LANG_RULE + String(S.briefing).slice(0, 900) + DRIVE_PART() + laengeRegel() + BEFEHL_RULE + LANG_TAIL
   + "\n\nKeine Aufzaehlungen mit Sternchen, keine Emojis, keine Wiederholung meiner Frage. "
   + "Wie im echten Gespraech gesprochen.";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
