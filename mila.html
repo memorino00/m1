@@ -437,13 +437,14 @@ window.addEventListener("unhandledrejection", function(e){
 
     <label class="lb">Wie ausführlich soll sie antworten?</label>
     <select id="laenge">
-      <option value="kurz">Kurz – ein, zwei Sätze, wie im Vorbeigehen</option>
-      <option value="normal" selected>Normal – drei bis sechs Sätze, mit Begründung</option>
-      <option value="lang">Ausführlich – erzählt auch mal fünf Minuten, wie ein Podcast</option>
+      <option value="auto" selected>Automatisch – so lang wie nötig, bei Gedicht/Geschichte ausführlich</option>
+      <option value="kurz">Immer kurz – ein, zwei Sätze, wie im Vorbeigehen</option>
+      <option value="lang">Immer ausführlich – erzählt auch mal fünf Minuten</option>
     </select>
-    <div class="foot">Das war der Grund, warum sie bisher nach zwei Sätzen aufgehört hat – im Charakter stand
-      „kurze Sätze“, und das Modell hat es wörtlich genommen. „Ausführlich“ gilt vor allen anderen Regeln:
-      dann erzählt sie Geschichten zu Ende, statt mitten drin abzubrechen.</div>
+    <div class="foot"><b>Automatisch</b> ist das, was du willst: eine Frage – ein, zwei Sätze; eine Erklärung –
+      ein paar Sätze mehr; „erzähl mir ein Gedicht/eine Geschichte" – dann holt sie aus und redet auch mal
+      mehrere Minuten. Sie bricht nie mitten in einer Geschichte ab, nur um kurz zu bleiben.
+      Das war der Grund für die alten Zwei-Satz-Antworten: im Charakter stand „kurze Sätze" – das gilt jetzt nicht mehr.</div>
 
     <label class="lb">Charakter (was sie im Ohr hat, bevor du redest)</label>
     <textarea id="briefing"></textarea>
@@ -656,7 +657,7 @@ window.addEventListener("unhandledrejection", function(e){
    ===================================================================== */
 
 const LS = "milaRealtimeV1";
-const VERSION = "v6.3";
+const VERSION = "v6.4";
 let modelFixed = false;
 const DEFAULT_MODEL = "gemini-3.8-live";
 const LIVE_CANDIDATES = ["gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview"];
@@ -682,6 +683,14 @@ const WAKE_RULE = "\n\nNAMENSMODUS ist AN: Ich spreche dich nur mit „Mila“ a
 
 /* ---------- Antwortlänge: der Grund, warum sie nur zwei Sätze sagte ---------- */
 const LAENGE_TEXTE = {
+  auto:   "Antworte so lang, wie es die Sache verlangt – und nicht länger. "
+        + "Eine einfache Frage bekommt ein bis zwei Sätze. Eine Erklärung drei bis sechs Sätze, "
+        + "mit Begründung und, wenn es hilft, einem Beispiel. "
+        + "Wenn ich aber ausdrücklich etwas Langes hören will – eine Geschichte, ein Gedicht, einen Vortrag, "
+        + "eine ausführliche Erklärung, einen Plan –, dann erzählst du es vollständig und ausgiebig; "
+        + "dann darfst du mehrere Minuten reden und ich höre zu. "
+        + "Brich niemals mitten in einer Geschichte ab, nur um kurz zu bleiben, und kündige Länge nicht an – "
+        + "leg einfach los.",
   kurz:   "Antworte knapp: ein bis zwei Sätze. Wie ein Satz im Vorbeigehen.",
   normal: "Antworte so lang, wie es die Frage verdient: meist drei bis sechs Sätze, "
         + "mit einem Gedanken, einer Begründung und wenn es passt einem Beispiel. "
@@ -692,14 +701,14 @@ const LAENGE_TEXTE = {
         + "erzählst du sie vollständig zu Ende – nicht in zwei Sätzen abbrechen."
 };
 function laengeRegel(){
-  const t = LAENGE_TEXTE[S.laenge] || LAENGE_TEXTE.normal;
+  const t = LAENGE_TEXTE[S.laenge] || LAENGE_TEXTE.auto;
   return "\n\nANTWORTLÄNGE (gilt vor allen anderen Regeln, auch vor „kurze Sätze“): " + t
        + " Sprich in ganzen Sätzen, mit Pausen – Länge darf nie durch Hetzen ersetzt werden.";
 }
-function maxOutText(){ return S.laenge === "lang" ? 1200 : (S.laenge === "kurz" ? 180 : 600); }
+function maxOutText(){ return S.laenge === "kurz" ? 180 : (S.laenge === "auto" || !S.laenge ? 1000 : 1200); }
 let tokenDeckel = 0;   /* wird gesetzt, falls Google die Token-Grenze ablehnt */
 function maxOutLive(){
-  const base = S.laenge === "lang" ? 4096 : (S.laenge === "kurz" ? 900 : 2400);
+  const base = S.laenge === "kurz" ? 900 : 8192;   /* auto und lang dürfen ausholen: ~4 Min Sprachausgabe */
   return tokenDeckel ? Math.min(base, tokenDeckel) : base;
 }
 
@@ -725,7 +734,7 @@ let S = {
   key:"", model:DEFAULT_MODEL, voice:"Kore", lang:"de-DE",
   ttsModel:"gemini-3.8-flash-tts", ttsVoice:"Kore",
   briefing:DEFAULT_BRIEFING, vad:"auto", log:[],
-  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[], laenge:"normal",
+  sil:1200, duplex:"full", resum:"", stats:true, reASR:false, micGain:1.8, wakeWorte:[], laenge:"auto",
   eq:{ preset:"neutral", hp:100, b1:0, b2:0, b3:0, b4:0 }, rawMic:false, wake:false,
   pttGrace:1600, sysVoice:"", sysRate:1.0, voiceMode:"auto",
   voiceRoute:"gemini", pVoice:"kerstin", pRate:1.0,   /* voiceRoute: "gemini" | "handy" */
@@ -735,6 +744,11 @@ const BAD_MODEL = /2\.5|3\.1-flash-live|preview-tts/i;
 function modelLooksDead(m){ return !m || BAD_MODEL.test(String(m)); }
 function load(){ try{ const r=localStorage.getItem(LS); if(r) S=Object.assign(S,JSON.parse(r)); }catch(e){} if(!S.briefing) S.briefing=DEFAULT_BRIEFING;
   /* Gemerkter Modellname aus einer alten Fassung? Der ist am 17.11. abgeschaltet worden. */
+  /* Einmalig: alte Stufen „normal"/„lang" werden zu „automatisch" – so wollte es der Nutzer (dynamisch). */
+  if(!S.laengeNeu){
+    if(S.laenge === "normal" || S.laenge === "lang" || !S.laenge) S.laenge = "auto";
+    S.laengeNeu = true;
+  }
   if(modelLooksDead(S.model)){ S.model = DEFAULT_MODEL; S.modelsChecked = false; modelFixed = true; }
   if(!S.ttsModel || BAD_MODEL.test(String(S.ttsModel))){ S.ttsModel = TTS_CANDIDATES[0]; }
   if(typeof S.sil !== "number") S.sil = 2200;
@@ -1405,9 +1419,11 @@ function connect(){
     if(msg.error){
       const roh = msg.error.message || JSON.stringify(msg).slice(0,180);
       /* Google mag die Token-Grenze nicht? Dann kleiner nachfassen, statt aufzugeben. */
-      if(/maxOutputTokens|max_output_tokens/i.test(roh) && !window.__tokRetry){
-        window.__tokRetry = true; tokenDeckel = 1200;
-        feed("w", "Google mag meine Token-Grenze nicht – ich versuche es mit 1200 statt " + maxOutLive());
+      if(/maxOutputTokens|max_output_tokens/i.test(roh) && (window.__tokStufe || 0) < 3){
+        const leiter = [4096, 2400, 1200];
+        const stufe = window.__tokStufe || 0;
+        window.__tokStufe = stufe + 1; tokenDeckel = leiter[stufe];
+        feed("w", "Google mag meine Token-Grenze nicht – ich nehme " + leiter[stufe] + " statt " + maxOutLive());
         try{ if(ws && ws.readyState === 1) ws.close(1000, "token-retry"); }catch(e){}
         ws = null; live = false;
         setTimeout(() => { try{ reconnect("Token-Grenze angepasst"); }catch(e){} }, 800);
@@ -1724,7 +1740,7 @@ function fillCfg(){
   if($("reasr")) $("reasr").checked = S.reASR === true;
   if($("rawmic")) $("rawmic").checked = S.rawMic === true;
   if($("wakemode")) $("wakemode").value = S.wake ? "an" : "aus";
-  if($("laenge")) $("laenge").value = S.laenge || "normal";
+  if($("laenge")) $("laenge").value = S.laenge || "auto";
   try{ wakeUi(); }catch(e){}
   if($("headphones")) $("headphones").checked = S.headphones === true;
   try{ modelListeFuellen(); }catch(e){}
@@ -1741,7 +1757,7 @@ function applyCfg(){
   if(modelLooksDead(S.model)) toast("Achtung: „" + S.model + "“ ist abgeschaltet. Nimm „" + DEFAULT_MODEL + "“ oder druecke „Modelle pruefen“.", 14000);
   S.voice=$("voice").value; S.lang=$("lang").value.trim() || "de-DE";
   S.briefing=$("briefing").value.trim() || DEFAULT_BRIEFING;
-  if($("laenge")) S.laenge = $("laenge").value || "normal";
+  if($("laenge")) S.laenge = $("laenge").value || "auto";
   S.vad=$("vad").value;
   S.ttsModel=$("ttsmodel").value.trim() || TTS_CANDIDATES[0];
   S.ttsVoice=$("ttsvoice").value || "Kore";
@@ -2035,7 +2051,7 @@ $("duplex").addEventListener("change", e => { S.duplex = e.target.value; save();
 if($("wakemode")) $("wakemode").addEventListener("change", e => namensmodus(e.target.value === "an"));
 if($("laenge")) $("laenge").addEventListener("change", e => {
   S.laenge = e.target.value; save();
-  const was = { kurz:"kurz", normal:"normal", lang:"ausführlich" }[S.laenge] || "normal";
+  const was = { kurz:"immer kurz", auto:"automatisch – so lang wie nötig", lang:"immer ausführlich" }[S.laenge] || "automatisch";
   feed("", "Antwortlänge: " + was);
   toast("Antwortlänge: " + was, 4000);
   if(activeMode === "live") reconnect("Antwortlänge").catch(()=>{});
